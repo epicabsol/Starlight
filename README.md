@@ -8,3 +8,5 @@ Instead of baking lightmaps, Starlight bakes 'light masks', which contain just t
 Starlight uses DirectX 12 and DXR to bake light masks for point lights, directional lights, and cubemaps ('sky lights').
 
 Starlight is meant to be consumed from both C++ as a static library, and from other languages as a dynamic-link library with unmangled exports (`cstarlight`).
+
+StarlightDemo is a command-line application that aims to demonstrate how to bake light masks with Starlight, while being as simple and clean as possible.
