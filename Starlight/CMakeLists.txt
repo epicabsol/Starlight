@@ -1,0 +1,10 @@
+add_library(starlight STATIC "src/Starlight.cpp")
+target_include_directories(starlight PUBLIC "include")
+target_include_directories(starlight PUBLIC "../DirectXMath/Inc")
+target_link_libraries(starlight PUBLIC "d3d12")
+
+add_library(cstarlight SHARED "src/Starlight.cpp" "src/cstarlight.cpp")
+target_include_directories(cstarlight PUBLIC "include")
+target_include_directories(cstarlight PRIVATE "../DirectXMath/Inc")
+target_link_libraries(cstarlight PUBLIC "d3d12")
+target_compile_definitions(cstarlight PRIVATE "STARLIGHT_DLL")
