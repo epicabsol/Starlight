@@ -8,9 +8,15 @@
 
 #include "Starlight.hpp"
 
+#include "stb_image.h"
+#include "stb_image_write.h"
+
 using namespace DirectX;
 
 #define BYTES_PER_PIXEL (4)
+#define LIGHT_MASK_RESOLUTION (1024)
+#define INPUT_MESH_FILENAME "test_mesh.obj"
+#define OUTPUT_FILENAME "output.png"
 
 struct DemoVertex {
 	XMFLOAT3 Position;
@@ -110,12 +116,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 	//
 
 	PointLight pointLight = { { 1, 3, 1 }, 0.5f, 0.5f, 0.01f };
-	constexpr size_t stride = Align(BYTES_PER_PIXEL * 2, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-	uint8_t pointLightMaskBytes[stride * 2];
-	OutputBuffer pointLightMask = { &pointLightMaskBytes[0], stride, 2, 2 };
+	constexpr size_t stride = Align(BYTES_PER_PIXEL * LIGHT_MASK_RESOLUTION, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+	uint8_t* pointLightMaskBytes = new uint8_t[stride * LIGHT_MASK_RESOLUTION];
+	OutputBuffer pointLightMask = { &pointLightMaskBytes[0], stride, LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION };
 	_Starlight->BakePointLight(&pointLight, &pointLightMask);
 
-	// TODO: Save point light's mask's pixel data, which is in `pointLightMaskBytes`
+	// Save point light's mask's pixel data, which is in `pointLightMaskBytes` - or do whatever else you want with it
+	stbi_write_png(OUTPUT_FILENAME, LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION, 4, pointLightMaskBytes, (int)stride);
+
+	delete[] pointLightMaskBytes;
 
 	//
 	// CLEANUP
