@@ -11,12 +11,26 @@ struct ID3D12GraphicsCommandList;
 struct ID3D12Fence;
 struct ID3D12DescriptorHeap;
 struct ID3D12Resource;
+struct D3D12_RESOURCE_DESC;
 typedef void* HANDLE;
 enum D3D12_RESOURCE_STATES;
+enum DXGI_FORMAT;
+
+struct LoadedMesh;
 
 #include "DirectXMath.h"
 
 #define STARLIGHT_MAX_MESHES (0xFF)
+
+struct MeshFormat
+{
+	size_t VertexSize;
+
+	size_t PositionOffset; // Number of bytes from the beginning of a vertex to the beginning of the position vector
+	size_t NormalOffset; // Number of bytes from the beginning of a vertex to the beginning of the normal vector
+	size_t TexCoordOffset; // Number of bytes from the beginning of a vertex to the beginning of the texture coordinate
+	size_t LightmapCoordOffset;
+};
 
 struct MeshInfo
 {
@@ -27,10 +41,6 @@ struct MeshInfo
 	const void* IndexData;
 	size_t IndexSize;
 	size_t IndexCount;
-
-	size_t PositionOffset; // Number of bytes from the beginning of a vertex to the beginning of the position vector
-	size_t NormalOffset; // Number of bytes from the beginning of a vertex to the beginning of the normal vector
-	size_t TexCoordOffset; // Number of bytes from the beginning of a vertex to the beginning of the texture coordinate
 
 	DirectX::XMFLOAT4X4 Transform;
 };
@@ -99,7 +109,11 @@ private:
 	ID3D12Resource* _LightmaskBuffer = nullptr;
 	ID3D12Resource* _ReadbackBuffer = nullptr;
 
-	Starlight(ID3D12Device* device);
+	MeshFormat _MeshFormat;
+	LoadedMesh* _Meshes;
+	size_t _MeshCount;
+
+	Starlight(ID3D12Device* device, const MeshFormat& meshFormat);
 
 	/**
 	 * Prepares Starlight to bake into the given output buffer.
@@ -111,14 +125,19 @@ private:
 	void CleanupOutputBuffer(const OutputBuffer* outputBuffer);
 	void ExecuteAndReset();
 	void TransitionResource(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
+	ID3D12Resource* CreateBuffer(size_t size, const char* data);
+	ID3D12Resource* CreateTexture(size_t width, size_t height, size_t stride, DXGI_FORMAT format, const char* data);
+	ID3D12Resource* CreateResource(const D3D12_RESOURCE_DESC* description, size_t stride, size_t dataSize, const char* data);
 
 public:
 	~Starlight();
+
+	inline const MeshFormat& GetMeshFormat() const { return this->_MeshFormat; }
 
 	void AddMesh(const MeshInfo* meshInfo, const MaterialInfo* materialInfo);
 	void BakePointLight(const PointLight* pointLight, const OutputBuffer* outputBuffer);
 	void BakeDirectionalLight(const DirectionalLight* directionalLight, const OutputBuffer* outputBuffer);
 	void BakeSkyLight(const SkyLight* skyLight, const OutputBuffer* outputBuffer);
 
-	static Starlight* CreateStarlight(ID3D12Device* device);
+	static Starlight* CreateStarlight(ID3D12Device* device, const MeshFormat& meshFormat);
 };

@@ -10,6 +10,7 @@
 #define STARLIGHT_API __declspec(dllimport)
 #endif
 
+typedef struct MeshFormat starlight_mesh_format_t;
 typedef struct MeshInfo starlight_mesh_info_t;
 typedef struct MaterialInfo starlight_material_info_t;
 typedef struct PointLight starlight_point_light_t;
@@ -24,7 +25,7 @@ extern "C"
 
 typedef void starlight_t;
 
-STARLIGHT_API starlight_t* starlight_create(void* device);
+STARLIGHT_API starlight_t* starlight_create(void* device, starlight_mesh_format_t meshFormat);
 STARLIGHT_API void starlight_destroy(starlight_t* starlight);
 
 STARLIGHT_API void starlight_add_mesh(starlight_t* starlight, const starlight_mesh_info_t* mesh_info, const starlight_material_info_t* material_info);

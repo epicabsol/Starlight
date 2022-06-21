@@ -9,9 +9,9 @@ typedef DirectionalLight starlight_directional_light_t;
 typedef SkyLight starlight_sky_light_t;
 typedef OutputBuffer starlight_output_buffer_t;
 
-starlight_t* starlight_create(void* device)
+starlight_t* starlight_create(void* device, starlight_mesh_format_t meshFormat)
 {
-	return Starlight::CreateStarlight((ID3D12Device*)device);
+	return Starlight::CreateStarlight((ID3D12Device*)device, meshFormat);
 }
 
 void starlight_destroy(starlight_t* starlight)

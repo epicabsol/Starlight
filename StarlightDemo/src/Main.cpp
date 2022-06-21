@@ -4,6 +4,7 @@
 
 #include <d3d12.h>
 #include <dxgi.h>
+#include <dxgidebug.h>
 #include <stdint.h>
 
 #include "Starlight.hpp"
@@ -22,7 +23,7 @@ struct DemoVertex {
 	XMFLOAT3 Position;
 	XMFLOAT3 Normal;
 	XMFLOAT2 TexCoord;
-	XMFLOAT2 LightmapTexCoord;
+	XMFLOAT2 LightmapCoord;
 };
 
 ID3D12Device* _Device = nullptr;
@@ -54,6 +55,25 @@ void EnableD3D12DebugLayer()
 	}
 }
 
+typedef HRESULT(*DXGIGetDebugInterface_t)(const IID& riid, void** ppDebug);
+
+void ReportDXGILeaks()
+{
+	HMODULE dxgiDebug = GetModuleHandleW(L"Dxgidebug.dll");
+	if (dxgiDebug != nullptr)
+	{
+		DXGIGetDebugInterface_t dxgiGetDebugInterface = (DXGIGetDebugInterface_t)GetProcAddress(dxgiDebug, "DXGIGetDebugInterface");
+		if (dxgiGetDebugInterface != nullptr)
+		{
+			IDXGIDebug* debugController = nullptr;
+			if (SUCCEEDED(dxgiGetDebugInterface(IID_PPV_ARGS(&debugController))))
+			{
+				debugController->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
+			}
+		}
+	}
+}
+
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdLine, int nCmdShow)
 {
 	EnableD3D12DebugLayer();
@@ -73,7 +93,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 	}
 
 	// Initialize Starlight with the d3d12 device
-	_Starlight = Starlight::CreateStarlight(_Device);
+	MeshFormat meshFormat = {
+		sizeof(DemoVertex),
+		offsetof(DemoVertex, Position),
+		offsetof(DemoVertex, Normal),
+		offsetof(DemoVertex, TexCoord),
+		offsetof(DemoVertex, LightmapCoord),
+	};
+	_Starlight = Starlight::CreateStarlight(_Device, meshFormat);
 	if (_Starlight == nullptr)
 	{
 		OutputDebugStringW(L"Failed to create bake context.");
@@ -87,9 +114,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 	MeshInfo firstMesh = {
 		&_PlaneVertices[0], sizeof(_PlaneVertices[0]), sizeof(_PlaneVertices) / sizeof(_PlaneVertices[0]),
 		&_PlaneIndices[0], sizeof(_PlaneIndices[0]), sizeof(_PlaneIndices) / sizeof(_PlaneIndices[0]),
-		offsetof(DemoVertex, Position),
-		offsetof(DemoVertex, Normal),
-		offsetof(DemoVertex, TexCoord),
 	};
 	XMStoreFloat4x4(&firstMesh.Transform, XMMatrixIdentity());
 	uint8_t firstDiffuseTexture[] = {
@@ -134,6 +158,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 	_Starlight = nullptr;
 	_Device->Release();
 	_Device = nullptr;
+
+	ReportDXGILeaks();
 
 	return 0;
 }

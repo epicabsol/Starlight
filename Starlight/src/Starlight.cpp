@@ -5,6 +5,10 @@
 #include "d3dx12.h"
 #include <d3d12.h>
 
+#include "UVVertexShader.h"
+
+#include "LoadedMesh.hpp"
+
 // Three descriptors per mesh - constant buffer, diffuse texture, NormalRoughnessMetallic texture
 #define DESCRIPTORS_PER_MESH (3)
 
@@ -13,7 +17,7 @@ inline unsigned int Align(unsigned int size, unsigned int alignment)
 	return (size + (alignment - 1)) & ~(alignment - 1);
 }
 
-Starlight::Starlight(ID3D12Device* device) : _Device(device)
+Starlight::Starlight(ID3D12Device* device, const MeshFormat& meshFormat) : _Device(device), _MeshFormat(meshFormat)
 {
 	device->AddRef();
 	this->_RTVDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
@@ -41,6 +45,9 @@ Starlight::Starlight(ID3D12Device* device) : _Device(device)
 	// Mesh descriptor heap (three descriptors per mesh)
 	D3D12_DESCRIPTOR_HEAP_DESC meshHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, STARLIGHT_MAX_MESHES * DESCRIPTORS_PER_MESH, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
 	device->CreateDescriptorHeap(&meshHeapDesc, IID_PPV_ARGS(&this->_MeshDescriptorHeap));
+
+	this->_MeshCount = 0;
+	this->_Meshes = new LoadedMesh[STARLIGHT_MAX_MESHES];
 }
 
 void Starlight::PrepareOutputBuffer(const OutputBuffer* outputBuffer)
@@ -74,9 +81,7 @@ void Starlight::PrepareOutputBuffer(const OutputBuffer* outputBuffer)
 
 void Starlight::CleanupOutputBuffer(const OutputBuffer* outputBuffer)
 {
-	// TODO: Implement!
 	this->TransitionResource(this->_LightmaskBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
-	//this->_CommandList->CopyResource(this->_ReadbackBuffer, this->_LightmaskBuffer);
 
 	D3D12_TEXTURE_COPY_LOCATION source = CD3DX12_TEXTURE_COPY_LOCATION(this->_LightmaskBuffer, 0);
 	D3D12_PLACED_SUBRESOURCE_FOOTPRINT destinationFootprint = { 0, { DXGI_FORMAT_R8G8B8A8_UNORM, (unsigned int)outputBuffer->Width, (unsigned int)outputBuffer->Height, 1, (unsigned int)outputBuffer->Stride } };
@@ -124,13 +129,102 @@ void Starlight::TransitionResource(ID3D12Resource* resource, D3D12_RESOURCE_STAT
 	this->_CommandList->ResourceBarrier(1, &barrier);
 }
 
+ID3D12Resource* Starlight::CreateBuffer(size_t size, const char* data)
+{
+	D3D12_RESOURCE_DESC bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(size);
+	return this->CreateResource(&bufferDesc, 1, size, data);
+}
+
+ID3D12Resource* Starlight::CreateTexture(size_t width, size_t height, size_t stride, DXGI_FORMAT format, const char* data)
+{
+	D3D12_RESOURCE_DESC textureDesc = CD3DX12_RESOURCE_DESC::Tex2D(format, width, height, 1, 1, 1, 0);
+	return this->CreateResource(&textureDesc, stride, stride * height, data);
+}
+
+ID3D12Resource* Starlight::CreateResource(const D3D12_RESOURCE_DESC* description, size_t stride, size_t dataSize, const char* data)
+{
+	assert(description != nullptr);
+	assert(data != nullptr);
+
+	// Creating a new upload buffer each time this method is called isn't ideal, but it's not going to have any performance impact compared to
+	// the most expensive things we're doing (raytracing lol)
+	size_t uploadStride = description->Dimension == D3D12_RESOURCE_DIMENSION_BUFFER ? 1 : Align(stride, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+	size_t uploadSize = uploadStride * (dataSize / stride);
+
+	// Create upload buffer
+	D3D12_HEAP_PROPERTIES uploadHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+	D3D12_RESOURCE_DESC uploadDesc = CD3DX12_RESOURCE_DESC::Buffer(uploadSize);
+	ID3D12Resource* uploadBuffer = nullptr;
+	this->_Device->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &uploadDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&uploadBuffer));
+
+	// Create actual buffer
+	D3D12_HEAP_PROPERTIES defaultHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+	ID3D12Resource* buffer = nullptr;
+	this->_Device->CreateCommittedResource(&defaultHeap, D3D12_HEAP_FLAG_NONE, description, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&buffer));
+
+	// Copy data to the upload buffer
+	D3D12_RANGE emptyRange = CD3DX12_RANGE(0, 0);
+	char* uploadBytes = nullptr;
+	uploadBuffer->Map(0, &emptyRange, (void**)&uploadBytes);
+	if (description->Dimension == D3D12_RESOURCE_DIMENSION_BUFFER || stride == uploadStride)
+	{
+		memcpy_s(uploadBytes, uploadSize, data, dataSize);
+	}
+	else
+	{
+		for (size_t row = 0; row < dataSize / stride; row++)
+		{
+			memcpy_s(uploadBytes + row * uploadStride, uploadStride, data + row * stride, stride);
+		}
+	}
+	uploadBuffer->Unmap(0, nullptr);
+
+	// Copy data from the upload buffer to the final buffer
+	if (description->Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
+	{
+		this->_CommandList->CopyResource(buffer, uploadBuffer);
+	}
+	else
+	{
+		D3D12_TEXTURE_COPY_LOCATION destination = CD3DX12_TEXTURE_COPY_LOCATION(buffer, 0);
+		D3D12_PLACED_SUBRESOURCE_FOOTPRINT sourceFootprint = { 0, { description->Format, description->Width, description->Height, 1, uploadStride } };
+		D3D12_TEXTURE_COPY_LOCATION source = CD3DX12_TEXTURE_COPY_LOCATION(uploadBuffer, sourceFootprint);
+		this->_CommandList->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
+	}
+	this->ExecuteAndReset();
+
+	uploadBuffer->Release();
+
+	return buffer;
+}
+
 Starlight::~Starlight()
 {
+	for (size_t i = 0; i < this->_MeshCount; i++)
+	{
+		this->_Meshes[i].VertexBuffer->Release();
+		this->_Meshes[i].VertexBuffer = nullptr;
+		this->_Meshes[i].IndexBuffer->Release();
+		this->_Meshes[i].IndexBuffer = nullptr;
+		this->_Meshes[i].ConstantBuffer->Release();
+		this->_Meshes[i].ConstantBuffer = nullptr;
+		this->_Meshes[i].DiffuseTexture->Release();
+		this->_Meshes[i].DiffuseTexture = nullptr;
+		this->_Meshes[i].NormalRoughnessMetallicTexture->Release();
+		this->_Meshes[i].NormalRoughnessMetallicTexture = nullptr;
+	}
+
 	this->_MeshDescriptorHeap->Release();
 	this->_MeshDescriptorHeap = nullptr;
 
 	this->_RTVDescriptorHeap->Release();
 	this->_RTVDescriptorHeap = nullptr;
+
+	this->_Fence->Release();
+	this->_Fence = nullptr;
+
+	this->_CommandList->Release();
+	this->_CommandList = nullptr;
 
 	this->_CommandAllocator->Release();
 	this->_CommandAllocator = nullptr;
@@ -144,7 +238,51 @@ Starlight::~Starlight()
 
 void Starlight::AddMesh(const MeshInfo* meshInfo, const MaterialInfo* materialInfo)
 {
-	// TODO: Implement!
+	assert(this->_MeshCount < STARLIGHT_MAX_MESHES);
+	assert(meshInfo != nullptr);
+	assert(materialInfo != nullptr);
+	assert(meshInfo->VertexSize == this->_MeshFormat.VertexSize);
+
+	// Pick the correct DXGI format for the indices
+	DXGI_FORMAT indexFormat = DXGI_FORMAT_UNKNOWN;
+	if (meshInfo->IndexSize == 1)
+	{
+		indexFormat = DXGI_FORMAT_R8_UINT;
+	}
+	else if (meshInfo->IndexSize == 2)
+	{
+		indexFormat = DXGI_FORMAT_R16_UINT;
+	}
+	else if (meshInfo->IndexSize == 4)
+	{
+		indexFormat = DXGI_FORMAT_R32_UINT;
+	}
+	assert(indexFormat != DXGI_FORMAT_UNKNOWN);
+
+	LoadedMesh* mesh = &this->_Meshes[this->_MeshCount];
+
+	// Vertices
+	mesh->VertexBuffer = this->CreateBuffer(meshInfo->VertexSize * meshInfo->VertexCount, (const char*)meshInfo->VertexData);
+	mesh->VertexSize = meshInfo->VertexSize;
+	mesh->VertexCount = meshInfo->VertexCount;
+	
+	// Indices
+	mesh->IndexBuffer = this->CreateBuffer(meshInfo->IndexSize * meshInfo->IndexCount, (const char*)meshInfo->IndexData);
+	mesh->IndexFormat = indexFormat;
+	mesh->IndexCount = meshInfo->IndexCount;
+
+	// Constants
+	MeshConstants constants = {
+		meshInfo->Transform,
+		materialInfo->DiffuseTint,
+	};
+	mesh->ConstantBuffer = this->CreateBuffer(sizeof(constants), (const char*)&constants);
+
+	// Textures
+	mesh->DiffuseTexture = this->CreateTexture(materialInfo->DiffuseTexture.Width, materialInfo->DiffuseTexture.Height, materialInfo->DiffuseTexture.Stride, DXGI_FORMAT_R8G8B8A8_UNORM, (const char*)materialInfo->DiffuseTexture.PixelData);
+	mesh->NormalRoughnessMetallicTexture = this->CreateTexture(materialInfo->NormalRoughnessMetallicTexture.Width, materialInfo->NormalRoughnessMetallicTexture.Height, materialInfo->NormalRoughnessMetallicTexture.Stride, DXGI_FORMAT_R8G8B8A8_UNORM, (const char*)materialInfo->NormalRoughnessMetallicTexture.PixelData);
+
+	this->_MeshCount += 1;
 }
 
 void Starlight::BakePointLight(const PointLight* pointLight, const OutputBuffer* outputBuffer)
@@ -169,10 +307,10 @@ void Starlight::BakeSkyLight(const SkyLight* skyLight, const OutputBuffer* outpu
 	// TODO: Implement!
 }
 
-Starlight* Starlight::CreateStarlight(ID3D12Device* device)
+Starlight* Starlight::CreateStarlight(ID3D12Device* device, const MeshFormat& meshFormat)
 {
 	// TODO: Implement!
 
-	return new Starlight(device);
+	return new Starlight(device, meshFormat);
 }
 
