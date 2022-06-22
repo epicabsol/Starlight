@@ -25,11 +25,12 @@ function(dxc shader_name entrypoint profile)
 		COMMAND ${CMAKE_COMMAND} -DSHADER_NAME=${shader_name} -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/shaders -P ${CMAKE_SOURCE_DIR}/Starlight/cmake/ShaderGenerate.cmake
 	)
 
-	set(all_shaders "shaders/${shader_name}.cpp ${all_shaders}" PARENT_SCOPE)
+	set(all_shaders "shaders/${shader_name}.cpp;${all_shaders}" PARENT_SCOPE)
 endfunction()
 
 # Shaders
 dxc("UVVertexShader" "VSMain" "vs_6_0")
+dxc("PointLightPixelShader" "PSMain" "ps_6_0")
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 string(STRIP "${all_shaders}" all_shaders)

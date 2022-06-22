@@ -6,6 +6,7 @@
 #include <d3d12.h>
 
 #include "UVVertexShader.h"
+#include "PointLightPixelShader.h"
 
 #include "LoadedMesh.hpp"
 
@@ -45,6 +46,34 @@ Starlight::Starlight(ID3D12Device* device, const MeshFormat& meshFormat) : _Devi
 	// Mesh descriptor heap (three descriptors per mesh)
 	D3D12_DESCRIPTOR_HEAP_DESC meshHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, STARLIGHT_MAX_MESHES * DESCRIPTORS_PER_MESH, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
 	device->CreateDescriptorHeap(&meshHeapDesc, IID_PPV_ARGS(&this->_MeshDescriptorHeap));
+
+	// Pipeline State for point lights
+	D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = CD3DX12_ROOT_SIGNATURE_DESC(0, nullptr, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+	ID3DBlob* signatureBlob = nullptr;
+	ID3DBlob* signatureErrors = nullptr;
+	D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &signatureErrors);
+	this->_Device->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&this->_RootSignature));
+	D3D12_INPUT_ELEMENT_DESC meshInputElements[] = {
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, meshFormat.PositionOffset, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, meshFormat.NormalOffset, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, meshFormat.TexCoordOffset, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "TEXCOORD", 1, DXGI_FORMAT_R32G32_FLOAT, 0, meshFormat.LightmapCoordOffset, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+	};
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+	psoDesc.InputLayout = { meshInputElements, sizeof(meshInputElements) / sizeof(meshInputElements[0]) };
+	psoDesc.pRootSignature = this->_RootSignature;
+	psoDesc.VS = CD3DX12_SHADER_BYTECODE(Shaders::UVVertexShaderBytes, Shaders::UVVertexShaderLength);
+	psoDesc.PS = CD3DX12_SHADER_BYTECODE(Shaders::PointLightPixelShaderBytes, Shaders::PointLightPixelShaderLength);
+	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_FILL_MODE_SOLID, D3D12_CULL_MODE_NONE, false, 0, 0.0f, 0.0f, false, false, false, 0, D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF);
+	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+	psoDesc.DepthStencilState.DepthEnable = false;
+	psoDesc.DepthStencilState.StencilEnable = false;
+	psoDesc.SampleMask = UINT_MAX;
+	psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	psoDesc.NumRenderTargets = 1;
+	psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	psoDesc.SampleDesc.Count = 1;
+	this->_Device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&this->_PointLightPipelineState));
 
 	this->_MeshCount = 0;
 	this->_Meshes = new LoadedMesh[STARLIGHT_MAX_MESHES];
@@ -214,6 +243,12 @@ Starlight::~Starlight()
 		this->_Meshes[i].NormalRoughnessMetallicTexture = nullptr;
 	}
 
+	this->_PointLightPipelineState->Release();
+	this->_PointLightPipelineState = nullptr;
+
+	this->_RootSignature->Release();
+	this->_RootSignature = nullptr;
+
 	this->_MeshDescriptorHeap->Release();
 	this->_MeshDescriptorHeap = nullptr;
 
@@ -245,11 +280,11 @@ void Starlight::AddMesh(const MeshInfo* meshInfo, const MaterialInfo* materialIn
 
 	// Pick the correct DXGI format for the indices
 	DXGI_FORMAT indexFormat = DXGI_FORMAT_UNKNOWN;
-	if (meshInfo->IndexSize == 1)
+	/*if (meshInfo->IndexSize == 1)
 	{
 		indexFormat = DXGI_FORMAT_R8_UINT;
 	}
-	else if (meshInfo->IndexSize == 2)
+	else*/ if (meshInfo->IndexSize == 2)
 	{
 		indexFormat = DXGI_FORMAT_R16_UINT;
 	}
@@ -292,7 +327,26 @@ void Starlight::BakePointLight(const PointLight* pointLight, const OutputBuffer*
 
 	this->PrepareOutputBuffer(outputBuffer);
 
-	// TODO: Implement!
+	this->_CommandList->SetPipelineState(this->_PointLightPipelineState);
+	this->_CommandList->SetGraphicsRootSignature(this->_RootSignature);
+	D3D12_VIEWPORT viewport = CD3DX12_VIEWPORT(0.0f, 0.0f, (float)outputBuffer->Width, (float)outputBuffer->Height);
+	this->_CommandList->RSSetViewports(1, &viewport);
+	D3D12_RECT scissor = { 0, 0, outputBuffer->Width, outputBuffer->Height };
+	this->_CommandList->RSSetScissorRects(1, &scissor);
+	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(this->_RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, this->_RTVDescriptorSize);
+	this->_CommandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
+	this->_CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	// Draw each of the meshes
+	for (size_t i = 0; i < this->_MeshCount; i++)
+	{
+		D3D12_VERTEX_BUFFER_VIEW vertexBuffer = { this->_Meshes[i].VertexBuffer->GetGPUVirtualAddress(), this->_Meshes[i].VertexCount * this->GetMeshFormat().VertexSize, this->GetMeshFormat().VertexSize };
+		this->_CommandList->IASetVertexBuffers(0, 1, &vertexBuffer);
+		D3D12_INDEX_BUFFER_VIEW indexBuffer = { this->_Meshes[i].IndexBuffer->GetGPUVirtualAddress(), this->_Meshes[i].IndexCount * this->GetMeshFormat().IndexSize, this->_Meshes[i].IndexFormat };
+		this->_CommandList->IASetIndexBuffer(&indexBuffer);
+		this->_CommandList->DrawIndexedInstanced(this->_Meshes[i].IndexCount, 1, 0, 0, 0);
+	}
+	this->ExecuteAndReset();
 
 	this->CleanupOutputBuffer(outputBuffer);
 }

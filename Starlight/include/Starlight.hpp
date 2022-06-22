@@ -11,6 +11,8 @@ struct ID3D12GraphicsCommandList;
 struct ID3D12Fence;
 struct ID3D12DescriptorHeap;
 struct ID3D12Resource;
+struct ID3D12RootSignature;
+struct ID3D12PipelineState;
 struct D3D12_RESOURCE_DESC;
 typedef void* HANDLE;
 enum D3D12_RESOURCE_STATES;
@@ -25,6 +27,7 @@ struct LoadedMesh;
 struct MeshFormat
 {
 	size_t VertexSize;
+	size_t IndexSize;
 
 	size_t PositionOffset; // Number of bytes from the beginning of a vertex to the beginning of the position vector
 	size_t NormalOffset; // Number of bytes from the beginning of a vertex to the beginning of the normal vector
@@ -108,6 +111,9 @@ private:
 
 	ID3D12Resource* _LightmaskBuffer = nullptr;
 	ID3D12Resource* _ReadbackBuffer = nullptr;
+
+	ID3D12RootSignature* _RootSignature = nullptr;
+	ID3D12PipelineState* _PointLightPipelineState = nullptr;
 
 	MeshFormat _MeshFormat;
 	LoadedMesh* _Meshes;

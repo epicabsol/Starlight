@@ -35,7 +35,7 @@ DemoVertex _PlaneVertices[] = {
 	{ { 1, 0, 1 }, { 0, 1, 0 }, { 1, 1 }, { 1, 1 } },
 	{ { -1, 0, 1 }, { 0, 1, 0 }, { 0, 1 }, { 0, 1 } },
 };
-uint8_t _PlaneIndices[] = {
+uint16_t _PlaneIndices[] = {
 	0, 1, 2,
 	0, 2, 3,
 };
@@ -47,12 +47,14 @@ inline constexpr unsigned int Align(unsigned int size, unsigned int alignment)
 
 void EnableD3D12DebugLayer()
 {
+#ifdef _DEBUG
 	ID3D12Debug* debugController = nullptr;
 	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
 	{
 		debugController->EnableDebugLayer();
 		debugController->Release();
 	}
+#endif
 }
 
 typedef HRESULT(*DXGIGetDebugInterface_t)(const IID& riid, void** ppDebug);
@@ -95,6 +97,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 	// Initialize Starlight with the d3d12 device
 	MeshFormat meshFormat = {
 		sizeof(DemoVertex),
+		sizeof(_PlaneIndices[0]),
 		offsetof(DemoVertex, Position),
 		offsetof(DemoVertex, Normal),
 		offsetof(DemoVertex, TexCoord),
