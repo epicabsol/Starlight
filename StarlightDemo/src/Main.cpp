@@ -11,6 +11,7 @@
 
 #include "stb_image.h"
 #include "stb_image_write.h"
+#include "tiny_obj_loader.hpp"
 
 using namespace DirectX;
 
@@ -136,7 +137,71 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 		{ &firstNormalRoughnessMetallicTexture[0], BYTES_PER_PIXEL * 2, 2, 2 },
 		{ 1.0f, 1.0f, 1.0f },
 	};
-	_Starlight->AddMesh(&firstMesh, &firstMaterial);
+	//_Starlight->AddMesh(&firstMesh, &firstMaterial);
+
+	// Load the mesh in suzanne.obj
+	tinyobj::ObjReaderConfig readerConfig;
+	tinyobj::ObjReader reader;
+	if (reader.ParseFromFile("assets/suzanne.obj"))
+	{
+		if (!reader.Warning().empty())
+		{
+			OutputDebugStringW(L"[WARNING]: OBJ message: ");
+			OutputDebugStringA(reader.Warning().c_str());
+		}
+
+		for (size_t i = 0; i < reader.GetShapes().size(); i++)
+		{
+			size_t triangleCount = reader.GetShapes()[i].mesh.num_face_vertices.size();
+
+			// Load the OBJ data into DemoVertexes and corresponding indices
+			// We aren't going to try merging duplicate vertices for this demo
+			// We also assume that the mesh is triangulated
+			DemoVertex* vertices = new DemoVertex[triangleCount * 3];
+			uint16_t* indices = new uint16_t[triangleCount * 3];
+
+			for (size_t j = 0; j < triangleCount; j++)
+			{
+				for (size_t k = 0; k < 3; k++)
+				{
+					size_t index = j * 3 + k;
+					tinyobj::index_t vertexIndices = reader.GetShapes()[i].mesh.indices[index];
+
+					vertices[index].Position.x = reader.GetAttrib().vertices[3 * vertexIndices.vertex_index + 0];
+					vertices[index].Position.y = reader.GetAttrib().vertices[3 * vertexIndices.vertex_index + 1];
+					vertices[index].Position.z = reader.GetAttrib().vertices[3 * vertexIndices.vertex_index + 2];
+
+					if (vertexIndices.normal_index >= 0)
+					{
+						vertices[index].Normal.x = reader.GetAttrib().normals[3 * vertexIndices.normal_index + 0];
+						vertices[index].Normal.y = reader.GetAttrib().normals[3 * vertexIndices.normal_index + 1];
+						vertices[index].Normal.z = reader.GetAttrib().normals[3 * vertexIndices.normal_index + 2];
+					}
+
+					if (vertexIndices.texcoord_index >= 0)
+					{
+						vertices[index].TexCoord.x = reader.GetAttrib().texcoords[2 * vertexIndices.texcoord_index + 0];
+						vertices[index].TexCoord.y = reader.GetAttrib().texcoords[2 * vertexIndices.texcoord_index + 1];
+
+						// For OBJ files, just use the texcoord as the lightmap texcoord
+						vertices[index].LightmapCoord = vertices[index].TexCoord;
+					}
+
+					indices[index] = index;
+				}
+			}
+
+			MeshInfo meshInfo = { vertices, sizeof(vertices[0]), triangleCount * 3, indices, sizeof(indices[0]), triangleCount * 3};
+			_Starlight->AddMesh(&meshInfo, &firstMaterial);
+
+			delete[] indices;
+			delete[] vertices;
+		}
+	}
+	else
+	{
+		printf("[WARNING]: Could not load assets/suzanne.obj!");
+	}
 
 	//
 	// DO BAKE

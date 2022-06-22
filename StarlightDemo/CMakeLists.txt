@@ -2,3 +2,6 @@ add_executable(StarlightDemo WIN32 "src/Main.cpp" "src/stb_image.c" "src/stb_ima
 target_include_directories(StarlightDemo PUBLIC "../Starlight/include/" "./include/")
 target_link_libraries(StarlightDemo PUBLIC starlight dxguid)
 
+# Assets
+file(COPY assets DESTINATION ".")
+
