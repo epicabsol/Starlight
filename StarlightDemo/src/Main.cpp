@@ -5,10 +5,12 @@
 #include <d3d12.h>
 #include <dxgi.h>
 #include <dxgidebug.h>
+#include <DXProgrammableCapture.h>
 #include <stdint.h>
 
 #include "Starlight.hpp"
 
+#include "pix3.h"
 #include "stb_image.h"
 #include "stb_image_write.h"
 #include "tiny_obj_loader.hpp"
@@ -30,6 +32,9 @@ struct DemoVertex {
 ID3D12Device* _Device = nullptr;
 Starlight* _Starlight = nullptr;
 
+IDXGIDebug* _DXGIDebug = nullptr;
+IDXGraphicsAnalysis* _CaptureController = nullptr;
+
 DemoVertex _PlaneVertices[] = {
 	{ { -1, 0, -1 }, { 0, 1, 0 }, { 0, 0 }, { 0, 0 } },
 	{ { 1, 0, -1 }, { 0, 1, 0 }, { 1, 0 }, { 1, 0 } },
@@ -46,34 +51,47 @@ inline constexpr unsigned int Align(unsigned int size, unsigned int alignment)
 	return (size + (alignment - 1)) & ~(alignment - 1);
 }
 
+typedef HRESULT(*DXGIGetDebugInterface_t)(const IID& riid, void** ppDebug);
+
 void EnableD3D12DebugLayer()
 {
 #ifdef _DEBUG
+	PIXLoadLatestWinPixGpuCapturerLibrary();
 	ID3D12Debug* debugController = nullptr;
 	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
 	{
 		debugController->EnableDebugLayer();
 		debugController->Release();
 	}
-#endif
-}
 
-typedef HRESULT(*DXGIGetDebugInterface_t)(const IID& riid, void** ppDebug);
-
-void ReportDXGILeaks()
-{
 	HMODULE dxgiDebug = GetModuleHandleW(L"Dxgidebug.dll");
 	if (dxgiDebug != nullptr)
 	{
 		DXGIGetDebugInterface_t dxgiGetDebugInterface = (DXGIGetDebugInterface_t)GetProcAddress(dxgiDebug, "DXGIGetDebugInterface");
 		if (dxgiGetDebugInterface != nullptr)
 		{
-			IDXGIDebug* debugController = nullptr;
-			if (SUCCEEDED(dxgiGetDebugInterface(IID_PPV_ARGS(&debugController))))
+			if (SUCCEEDED(dxgiGetDebugInterface(IID_PPV_ARGS(&_DXGIDebug))))
 			{
-				debugController->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
+			}
+
+			if (SUCCEEDED(dxgiGetDebugInterface(IID_PPV_ARGS(&_CaptureController))))
+			{
+				_CaptureController->BeginCapture();
 			}
 		}
+	}
+
+#endif
+}
+
+void ReportDXGILeaks()
+{
+
+	if (_DXGIDebug != nullptr)
+	{
+		_DXGIDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
+		_DXGIDebug->Release();
+		_DXGIDebug = nullptr;
 	}
 }
 
@@ -226,6 +244,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 	_Starlight = nullptr;
 	_Device->Release();
 	_Device = nullptr;
+
+	if (_CaptureController != nullptr)
+	{
+		_CaptureController->EndCapture();
+		_CaptureController->Release();
+		_CaptureController = nullptr;
+	}
 
 	ReportDXGILeaks();
 

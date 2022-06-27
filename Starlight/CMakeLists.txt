@@ -30,7 +30,7 @@ endfunction()
 
 # Shaders
 dxc("UVVertexShader" "VSMain" "vs_6_0")
-dxc("PointLightPixelShader" "PSMain" "ps_6_0")
+dxc("PointLightPixelShader" "PSMain" "ps_6_5")
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 string(STRIP "${all_shaders}" all_shaders)
@@ -38,12 +38,15 @@ string(STRIP "${all_shaders}" all_shaders)
 add_library(starlight STATIC "src/Starlight.cpp" "${all_shaders}")
 target_include_directories(starlight PUBLIC "include")
 target_include_directories(starlight PUBLIC "../DirectXMath/Inc")
+target_include_directories(starlight PRIVATE "../WinPixEventRuntime/include")
 target_include_directories(starlight PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/shaders")
-target_link_libraries(starlight PUBLIC "d3d12")
+target_link_libraries(starlight PUBLIC "d3d12" $<$<CONFIG:Debug>:"${CMAKE_CURRENT_SOURCE_DIR}/../WinPixEventRuntime/bin/WinPixEventRuntime">)
+
 
 add_library(cstarlight SHARED "src/Starlight.cpp" "${all_shaders}" "src/cstarlight.cpp")
 target_include_directories(cstarlight PUBLIC "include")
 target_include_directories(cstarlight PRIVATE "../DirectXMath/Inc")
+target_include_directories(cstarlight PRIVATE "../WinPixEventRuntime/include")
 target_include_directories(cstarlight PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 target_link_libraries(cstarlight PUBLIC "d3d12")
 target_compile_definitions(cstarlight PRIVATE "STARLIGHT_DLL")

@@ -27,4 +27,6 @@ struct LoadedMesh {
 
 	ID3D12Resource* DiffuseTexture;
 	ID3D12Resource* NormalRoughnessMetallicTexture;
+
+	ID3D12Resource* AccelerationStructure;
 };

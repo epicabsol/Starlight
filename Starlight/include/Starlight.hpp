@@ -5,15 +5,17 @@
 #include <d3d12.h>*/
 
 struct ID3D12Device;
+struct ID3D12Device5;
 struct ID3D12CommandQueue;
 struct ID3D12CommandAllocator;
-struct ID3D12GraphicsCommandList;
+struct ID3D12GraphicsCommandList4;
 struct ID3D12Fence;
 struct ID3D12DescriptorHeap;
 struct ID3D12Resource;
 struct ID3D12RootSignature;
 struct ID3D12PipelineState;
 struct D3D12_RESOURCE_DESC;
+struct D3D12_RAYTRACING_INSTANCE_DESC;
 typedef void* HANDLE;
 enum D3D12_RESOURCE_STATES;
 enum DXGI_FORMAT;
@@ -96,10 +98,10 @@ struct OutputBuffer
 class Starlight
 {
 private:
-	ID3D12Device* _Device;
+	ID3D12Device5* _Device;
 	ID3D12CommandQueue* _CommandQueue = nullptr;
 	ID3D12CommandAllocator* _CommandAllocator = nullptr;
-	ID3D12GraphicsCommandList* _CommandList = nullptr;
+	ID3D12GraphicsCommandList4* _CommandList = nullptr;
 	ID3D12Fence* _Fence = nullptr;
 	HANDLE _FenceEvent;
 	uint64_t _FenceValue = 1;
@@ -111,6 +113,13 @@ private:
 
 	ID3D12Resource* _LightmaskBuffer = nullptr;
 	ID3D12Resource* _ReadbackBuffer = nullptr;
+
+	// Raytracing resources
+	ID3D12Resource* _SceneAccelerationStructure = nullptr; // The top-level acceleration structure for DXR
+	ID3D12Resource* _SceneBuildScratchBuffer = nullptr; // Scratch buffer used when building `_SceneAccelerationStructure`
+	ID3D12Resource* _SceneInstanceBuffer = nullptr; // The buffer that contains the instances of the meshes, for building `_SceneAccelerationStructure`
+	D3D12_RAYTRACING_INSTANCE_DESC* _SceneInstanceData = nullptr; // The mapped contents of `_SceneInstanceBuffer`
+	bool _RebuildTopLevel = true;
 
 	ID3D12RootSignature* _RootSignature = nullptr;
 	ID3D12PipelineState* _PointLightPipelineState = nullptr;
@@ -131,9 +140,11 @@ private:
 	void CleanupOutputBuffer(const OutputBuffer* outputBuffer);
 	void ExecuteAndReset();
 	void TransitionResource(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
+	void RebuildTopLevelIfNeeded();
 	ID3D12Resource* CreateBuffer(size_t size, const char* data);
 	ID3D12Resource* CreateTexture(size_t width, size_t height, size_t stride, DXGI_FORMAT format, const char* data);
 	ID3D12Resource* CreateResource(const D3D12_RESOURCE_DESC* description, size_t stride, size_t dataSize, const char* data);
+	ID3D12Resource* CreateUAV(size_t size, D3D12_RESOURCE_STATES initialState);
 
 public:
 	~Starlight();
