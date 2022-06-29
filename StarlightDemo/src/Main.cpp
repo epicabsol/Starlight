@@ -25,6 +25,7 @@ using namespace DirectX;
 struct DemoVertex {
 	XMFLOAT3 Position;
 	XMFLOAT3 Normal;
+	XMFLOAT3 Tangent;
 	XMFLOAT2 TexCoord;
 	XMFLOAT2 LightmapCoord;
 };
@@ -36,10 +37,10 @@ IDXGIDebug* _DXGIDebug = nullptr;
 IDXGraphicsAnalysis* _CaptureController = nullptr;
 
 DemoVertex _PlaneVertices[] = {
-	{ { -1, 0, -1 }, { 0, 1, 0 }, { 0, 0 }, { 0, 0 } },
-	{ { 1, 0, -1 }, { 0, 1, 0 }, { 1, 0 }, { 1, 0 } },
-	{ { 1, 0, 1 }, { 0, 1, 0 }, { 1, 1 }, { 1, 1 } },
-	{ { -1, 0, 1 }, { 0, 1, 0 }, { 0, 1 }, { 0, 1 } },
+	{ { -1, 0, -1 }, { 0, 1, 0 }, { 1, 0, 0 }, { 0, 0 }, { 0, 0 } },
+	{ { 1, 0, -1 }, { 0, 1, 0 }, { 1, 0, 0 }, { 1, 0 }, { 1, 0 } },
+	{ { 1, 0, 1 }, { 0, 1, 0 }, { 1, 0, 0 }, { 1, 1 }, { 1, 1 } },
+	{ { -1, 0, 1 }, { 0, 1, 0 }, { 1, 0, 0 }, { 0, 1 }, { 0, 1 } },
 };
 uint16_t _PlaneIndices[] = {
 	0, 1, 2,
@@ -95,6 +96,75 @@ void ReportDXGILeaks()
 	}
 }
 
+// Based on https://marti.works/posts/post-calculating-tangents-for-your-mesh/post/
+void ComputeTangents(DemoVertex* vertices, size_t vertexCount, uint16_t* indices, size_t indexCount)
+{
+	XMFLOAT3* tanA = new XMFLOAT3[vertexCount];
+	XMFLOAT3* tanB = new XMFLOAT3[vertexCount];
+
+	for (size_t i = 0; i < vertexCount; i++)
+	{
+		tanA[i] = XMFLOAT3(0.0f, 0.0f, 0.0f);
+		tanB[i] = XMFLOAT3(0.0f, 0.0f, 0.0f);
+	}
+
+	for (size_t i = 0; i < indexCount; i += 3)
+	{
+		uint16_t i0 = indices[i];
+		uint16_t i1 = indices[i + 1];
+		uint16_t i2 = indices[i + 2];
+
+		XMVECTOR pos0 = XMLoadFloat3(&vertices[i0].Position);
+		XMVECTOR pos1 = XMLoadFloat3(&vertices[i1].Position);
+		XMVECTOR pos2 = XMLoadFloat3(&vertices[i2].Position);
+
+		XMVECTOR tex0 = XMLoadFloat2(&vertices[i0].TexCoord);
+		XMVECTOR tex1 = XMLoadFloat2(&vertices[i1].TexCoord);
+		XMVECTOR tex2 = XMLoadFloat2(&vertices[i2].TexCoord);
+
+		XMVECTOR edge1 = XMVectorSubtract(pos1, pos0);
+		XMVECTOR edge2 = XMVectorSubtract(pos2, pos0);
+
+		XMVECTOR uv1 = XMVectorSubtract(tex1, tex0);
+		XMVECTOR uv2 = XMVectorSubtract(tex2, tex0);
+
+		XMFLOAT2 uv1floats;
+		XMFLOAT2 uv2floats;
+		XMStoreFloat2(&uv1floats, uv1);
+		XMStoreFloat2(&uv2floats, uv2);
+		float r = 1.0f / (uv1floats.x * uv2floats.y - uv1floats.y * uv2floats.x);
+
+		XMVECTOR tangent = XMVectorScale(XMVectorSubtract(XMVectorScale(edge1, uv2floats.y), XMVectorScale(edge2, uv1floats.y)), r);
+		XMVECTOR bitangent = XMVectorScale(XMVectorSubtract(XMVectorScale(edge1, uv2floats.x), XMVectorScale(edge2, uv1floats.x)), r);
+
+		for (size_t j = 0; j < 3; j++)
+		{
+			XMStoreFloat3(&tanA[i0 + j], XMVectorAdd(tangent, XMLoadFloat3(&tanA[i0 + j])));
+		}
+		for (size_t j = 0; j < 3; j++)
+		{
+			XMStoreFloat3(&tanB[i0 + j], XMVectorAdd(bitangent, XMLoadFloat3(&tanB[i0 + j])));
+		}
+	}
+
+	for (size_t i = 0; i < vertexCount; i++)
+	{
+		XMVECTOR n = XMLoadFloat3(&vertices[i].Normal);
+		XMVECTOR t0 = XMLoadFloat3(&tanA[i]);
+		XMVECTOR t1 = XMLoadFloat3(&tanB[i]);
+
+		XMVECTOR t = XMVector3Normalize(XMVectorSubtract(t0, XMVectorMultiply(n, XMVector3Dot(n, t0))));
+		XMVECTOR c = XMVector3Cross(n, t0);
+
+		float dot = XMVectorGetX(XMVector3Dot(c, t1));
+		float w = dot < 0 ? -1.0f : 0.0f;
+		XMStoreFloat3(&vertices[i].Tangent, XMVectorScale(t, w));
+	}
+
+	delete[] tanA;
+	delete[] tanB;
+}
+
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdLine, int nCmdShow)
 {
 	EnableD3D12DebugLayer();
@@ -119,6 +189,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 		sizeof(_PlaneIndices[0]),
 		offsetof(DemoVertex, Position),
 		offsetof(DemoVertex, Normal),
+		offsetof(DemoVertex, Tangent),
 		offsetof(DemoVertex, TexCoord),
 		offsetof(DemoVertex, LightmapCoord),
 	};
@@ -160,7 +231,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 	// Load the mesh in suzanne.obj
 	tinyobj::ObjReaderConfig readerConfig;
 	tinyobj::ObjReader reader;
-	if (reader.ParseFromFile("assets/suzanne.obj"))
+	if (reader.ParseFromFile("assets/suzanneSubdiv.obj"))
 	{
 		if (!reader.Warning().empty())
 		{
@@ -208,6 +279,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 					indices[index] = index;
 				}
 			}
+
+			ComputeTangents(vertices, triangleCount * 3, indices, triangleCount * 3);
 
 			MeshInfo meshInfo = { vertices, sizeof(vertices[0]), triangleCount * 3, indices, sizeof(indices[0]), triangleCount * 3};
 			_Starlight->AddMesh(&meshInfo, &firstMaterial);

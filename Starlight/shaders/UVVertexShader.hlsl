@@ -8,6 +8,8 @@ LightmapPixel VSMain(MeshVertex input)
 	// TODO: Transform object-space values into world-space
     result.WorldPosition = input.Position;
     result.WorldNormal = input.Normal;
+    result.WorldTangent = input.Tangent;
+    result.WorldBitangent = cross(result.WorldNormal, result.WorldTangent);
 	
 	result.TexCoord = input.TexCoord;
 	result.LightmapCoord = input.LightmapCoord;

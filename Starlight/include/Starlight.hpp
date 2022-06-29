@@ -33,6 +33,7 @@ struct MeshFormat
 
 	size_t PositionOffset; // Number of bytes from the beginning of a vertex to the beginning of the position vector
 	size_t NormalOffset; // Number of bytes from the beginning of a vertex to the beginning of the normal vector
+	size_t TangentOffset; // Number of bytes from the beginning of a vertex to the beginning of the tangent vector
 	size_t TexCoordOffset; // Number of bytes from the beginning of a vertex to the beginning of the texture coordinate
 	size_t LightmapCoordOffset;
 };
