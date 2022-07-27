@@ -298,7 +298,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 	// DO BAKE
 	//
 
-	PointLight pointLight = { { 1, 3, 1 }, 0.5f, 0.5f, 0.01f };
+	PointLight pointLight = { { 0, 1.1, 0 }, 0.1f, 1.0f, 0.09f, 0.032f };
 	constexpr size_t stride = Align(BYTES_PER_PIXEL * LIGHT_MASK_RESOLUTION, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
 	uint8_t* pointLightMaskBytes = new uint8_t[stride * LIGHT_MASK_RESOLUTION];
 	OutputBuffer pointLightMask = { &pointLightMaskBytes[0], stride, LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION };

@@ -1,8 +1,18 @@
 #include "Common.hlsl"
 
+#define SAMPLE_COUNT (1000)
+
 RaytracingAccelerationStructure TLAS : register(t0);
 
-#define SAMPLE_COUNT (1000)
+cbuffer PointLightConstantBuffer : register(b0)
+{
+    float3 WorldPosition;
+    float Radius;
+    float AttenuationConstant;
+    float AttenuationLinear;
+    float AttenuationQuadratic;
+    float _Padding;
+}
 
 float SampleOcclusion(float3 start, float3 direction)
 {
@@ -11,7 +21,7 @@ float SampleOcclusion(float3 start, float3 direction)
     ray.Origin = start;
     ray.Direction = direction;
     ray.TMin = 0.0f;
-    ray.TMax = 1000.0f;
+    ray.TMax = 1.0f;
     q.TraceRayInline(TLAS, RAY_FLAG_NONE, 0xFF, ray);
     
     q.Proceed();
@@ -30,18 +40,31 @@ float SampleOcclusion(float3 start, float3 direction)
 
 float4 PSMain(LightmapPixel input) : SV_Target0
 {
-    float total = 0.0f;
+    float3 lightForward = normalize(input.WorldPosition - WorldPosition);
+    float3 lightSide = cross(lightForward, float3(0, 1, 0));
+    float3 lightUp = cross(lightSide, lightForward);
+    
+    float visibility = 0.0f;
     for (uint i = 0; i < SAMPLE_COUNT; i++)
     {
         float2 hammersley = hammersley2d(i, SAMPLE_COUNT);
         float3 localDirection = hemisphereProjectionUniform(hammersley.x, hammersley.y);
             
-        float3 worldDirection = localDirection.x * input.WorldTangent + localDirection.y * input.WorldBitangent + localDirection.z * input.WorldNormal;
-
-        total += SampleOcclusion(input.WorldPosition + input.WorldNormal * 0.001f, worldDirection);
-
+        float3 lightOffset = localDirection.x * lightSide + localDirection.y * lightUp + localDirection.z * lightForward;
+        float3 endPoint = WorldPosition + lightOffset * Radius;
+        float3 startPosition = input.WorldPosition + input.WorldNormal * 0.001f;
+        
+        visibility += SampleOcclusion(startPosition, endPoint - startPosition);
     }
-    total = total / SAMPLE_COUNT;
-    return float4(total, total, total, 1.0f);
-
+    visibility = visibility / SAMPLE_COUNT;
+    
+    float distance = length(input.WorldPosition - WorldPosition);
+    float attenuation = 1.0f / (AttenuationConstant + AttenuationLinear * distance + AttenuationQuadratic * distance * distance);
+    float3 lightColor = float3(1.0f, 1.0f, 1.0f);
+    float3 radiance = lightColor * attenuation * saturate(dot(input.WorldNormal, -lightForward));     
+    
+    // The total irradiance recieved from a point light is just the radiance - there is only the one ray contributing, all else is zero
+    float3 irradiance = radiance * visibility;
+    
+    return float4(irradiance, 1.0f);
 }

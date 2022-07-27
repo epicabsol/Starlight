@@ -14,6 +14,18 @@
 // Three descriptors per mesh - constant buffer, diffuse texture, NormalRoughnessMetallic texture
 #define DESCRIPTORS_PER_MESH (3)
 
+enum class BakeResource
+{
+	PointLightConstantBuffer,
+	Count,
+};
+
+struct PointLightConstants
+{
+	PointLight Light;
+	float _Padding;
+};
+
 inline unsigned int Align(unsigned int size, unsigned int alignment)
 {
 	return (size + (alignment - 1)) & ~(alignment - 1);
@@ -54,6 +66,11 @@ Starlight::Starlight(ID3D12Device* device, const MeshFormat& meshFormat) : _Mesh
 	D3D12_DESCRIPTOR_HEAP_DESC meshHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, STARLIGHT_MAX_MESHES * DESCRIPTORS_PER_MESH, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
 	device->CreateDescriptorHeap(&meshHeapDesc, IID_PPV_ARGS(&this->_MeshDescriptorHeap));
 
+	// Resource descriptor heap (one descriptor per BakeResource enum member)
+	D3D12_DESCRIPTOR_HEAP_DESC resourceHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (unsigned int)BakeResource::Count, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0 };
+	device->CreateDescriptorHeap(&resourceHeapDesc, IID_PPV_ARGS(&this->_ResourceDescriptorHeap));
+	this->_ResourceDescriptorHeap->SetName(L"ResourceDescriptorHeap");
+
 	// Allocate the top-level acceleration structure buffer and associated scratch buffer
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS topLevelInputs = { };
@@ -74,14 +91,21 @@ Starlight::Starlight(ID3D12Device* device, const MeshFormat& meshFormat) : _Mesh
 	D3D12_RANGE emptyRange = CD3DX12_RANGE(0, 0);
 	this->_SceneInstanceBuffer->Map(0, &emptyRange, (void**)&this->_SceneInstanceData);
 
+	// Constant buffer for point light baking
+	this->_PointLightConstantBuffer = this->CreateConstantBuffer(Align(sizeof(PointLightConstants), D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT));
+	this->_PointLightConstantBuffer->SetName(L"PointLightConstantBuffer");
+	D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = { this->_PointLightConstantBuffer->GetGPUVirtualAddress(), Align(sizeof(PointLightConstants), D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT) };
+	this->_Device->CreateConstantBufferView(&cbvDesc, CD3DX12_CPU_DESCRIPTOR_HANDLE(this->_ResourceDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), (unsigned int)BakeResource::PointLightConstantBuffer, this->_SRVDescriptorSize));
+	this->_PointLightConstantBuffer->Map(0, &emptyRange, (void**)&this->_PointLightConstantData);
+
 	// Pipeline State for point lights
-	CD3DX12_ROOT_PARAMETER rootParameters[1];
+	CD3DX12_ROOT_PARAMETER rootParameters[2] = { };
 	rootParameters[0].InitAsShaderResourceView(0);
-	D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = CD3DX12_ROOT_SIGNATURE_DESC(1, rootParameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-	ID3DBlob* signatureBlob = nullptr;
-	ID3DBlob* signatureErrors = nullptr;
-	D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &signatureErrors);
-	this->_Device->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&this->_RootSignature));
+	D3D12_DESCRIPTOR_RANGE pointLightConstantsRange = CD3DX12_DESCRIPTOR_RANGE(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+	rootParameters[1].InitAsDescriptorTable(1, &pointLightConstantsRange);
+	D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = CD3DX12_ROOT_SIGNATURE_DESC(sizeof(rootParameters) / sizeof(rootParameters[0]), rootParameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+	this->_PointLightRootSignature = this->CreateRootSignature(&rootSignatureDesc);
+	
 	D3D12_INPUT_ELEMENT_DESC meshInputElements[] = {
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, meshFormat.PositionOffset, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, meshFormat.NormalOffset, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
@@ -91,7 +115,7 @@ Starlight::Starlight(ID3D12Device* device, const MeshFormat& meshFormat) : _Mesh
 	};
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 	psoDesc.InputLayout = { meshInputElements, sizeof(meshInputElements) / sizeof(meshInputElements[0]) };
-	psoDesc.pRootSignature = this->_RootSignature;
+	psoDesc.pRootSignature = this->_PointLightRootSignature;
 	psoDesc.VS = CD3DX12_SHADER_BYTECODE(Shaders::UVVertexShaderBytes, Shaders::UVVertexShaderLength);
 	psoDesc.PS = CD3DX12_SHADER_BYTECODE(Shaders::PointLightPixelShaderBytes, Shaders::PointLightPixelShaderLength);
 	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_FILL_MODE_SOLID, D3D12_CULL_MODE_NONE, false, 0, 0.0f, 0.0f, false, false, false, 0, D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF);
@@ -113,6 +137,8 @@ void Starlight::PrepareOutputBuffer(const OutputBuffer* outputBuffer)
 {
 	float clearColor[] = { 1.0f, 0.0f, 0.0f, 1.0f };
 	D3D12_CLEAR_VALUE clearValue = CD3DX12_CLEAR_VALUE(DXGI_FORMAT_R8G8B8A8_UNORM, clearColor);
+
+	// TODO: Keep the lightmask buffer around and reuse it if its dimensions and format match
 
 	// Create lightmask buffer
 	D3D12_RESOURCE_DESC lightmaskDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, (unsigned int)outputBuffer->Width, (unsigned int)outputBuffer->Height, 1, 1, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
@@ -292,6 +318,39 @@ ID3D12Resource* Starlight::CreateUAV(size_t size, D3D12_RESOURCE_STATES initialS
 	return result;
 }
 
+ID3D12Resource* Starlight::CreateConstantBuffer(size_t size)
+{
+	D3D12_HEAP_PROPERTIES heap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+	D3D12_RESOURCE_DESC desc = CD3DX12_RESOURCE_DESC::Buffer(size);
+	desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+	ID3D12Resource* result = nullptr;
+	this->_Device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&result));
+	return result;
+}
+
+ID3D12RootSignature* Starlight::CreateRootSignature(const D3D12_ROOT_SIGNATURE_DESC* desc)
+{
+	ID3DBlob* signatureBlob = nullptr;
+	ID3DBlob* signatureErrors = nullptr;
+	D3D12SerializeRootSignature(desc, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &signatureErrors);
+	ID3D12RootSignature* rootSignature = nullptr;
+	this->_Device->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
+	if (signatureBlob != nullptr)
+	{
+		signatureBlob->Release();
+	}
+	if (signatureErrors != nullptr)
+	{
+		signatureErrors->Release();
+	}
+	return rootSignature;
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE Starlight::GetBakeResource(BakeResource resource) const
+{
+	return CD3DX12_GPU_DESCRIPTOR_HANDLE(this->_ResourceDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), (unsigned int)resource, this->_SRVDescriptorSize);
+}
+
 Starlight::~Starlight()
 {
 	for (size_t i = 0; i < this->_MeshCount; i++)
@@ -309,14 +368,19 @@ Starlight::~Starlight()
 		this->_Meshes[i].AccelerationStructure->Release();
 		this->_Meshes[i].AccelerationStructure = nullptr;
 	}
+	delete[] this->_Meshes;
 
 	this->_PointLightPipelineState->Release();
 	this->_PointLightPipelineState = nullptr;
 
-	this->_RootSignature->Release();
-	this->_RootSignature = nullptr;
+	this->_PointLightRootSignature->Release();
+	this->_PointLightRootSignature = nullptr;
 
 	D3D12_RANGE emptyRange = CD3DX12_RANGE(0, 0);
+	this->_PointLightConstantBuffer->Unmap(0, &emptyRange);
+	this->_PointLightConstantBuffer->Release();
+	this->_PointLightConstantBuffer = nullptr;
+
 	this->_SceneInstanceBuffer->Unmap(0, &emptyRange);
 	this->_SceneInstanceBuffer->Release();
 	this->_SceneInstanceBuffer = nullptr;
@@ -326,6 +390,9 @@ Starlight::~Starlight()
 
 	this->_SceneBuildScratchBuffer->Release();
 	this->_SceneBuildScratchBuffer = nullptr;
+
+	this->_ResourceDescriptorHeap->Release();
+	this->_ResourceDescriptorHeap = nullptr;
 
 	this->_MeshDescriptorHeap->Release();
 	this->_MeshDescriptorHeap = nullptr;
@@ -453,15 +520,16 @@ void Starlight::BakePointLight(const PointLight* pointLight, const OutputBuffer*
 {
 	this->RebuildTopLevelIfNeeded();
 
-	//this->_CommandAllocator->Reset();
-	//this->_CommandList->Reset(this->_CommandAllocator, nullptr);
-
 	this->PrepareOutputBuffer(outputBuffer);
 
-	this->_CommandList->SetPipelineState(this->_PointLightPipelineState);
-	this->_CommandList->SetGraphicsRootSignature(this->_RootSignature);
-	this->_CommandList->SetGraphicsRootShaderResourceView(0, this->_SceneAccelerationStructure->GetGPUVirtualAddress());
+	this->_PointLightConstantData->Light = *pointLight;
 
+	this->_CommandList->SetPipelineState(this->_PointLightPipelineState);
+	this->_CommandList->SetGraphicsRootSignature(this->_PointLightRootSignature);
+	this->_CommandList->SetGraphicsRootShaderResourceView(0, this->_SceneAccelerationStructure->GetGPUVirtualAddress());
+	this->_CommandList->SetDescriptorHeaps(1, &this->_ResourceDescriptorHeap);
+	this->_CommandList->SetGraphicsRootDescriptorTable(1, this->GetBakeResource(BakeResource::PointLightConstantBuffer));
+	
 	D3D12_VIEWPORT viewport = CD3DX12_VIEWPORT(0.0f, 0.0f, (float)outputBuffer->Width, (float)outputBuffer->Height);
 	this->_CommandList->RSSetViewports(1, &viewport);
 	D3D12_RECT scissor = { 0, 0, outputBuffer->Width, outputBuffer->Height };

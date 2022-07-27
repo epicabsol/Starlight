@@ -14,11 +14,8 @@ struct ID3D12DescriptorHeap;
 struct ID3D12Resource;
 struct ID3D12RootSignature;
 struct ID3D12PipelineState;
-struct D3D12_RESOURCE_DESC;
 struct D3D12_RAYTRACING_INSTANCE_DESC;
 typedef void* HANDLE;
-enum D3D12_RESOURCE_STATES;
-enum DXGI_FORMAT;
 
 struct LoadedMesh;
 
@@ -71,6 +68,7 @@ struct MaterialInfo
 struct PointLight
 {
 	DirectX::XMFLOAT3 Position;
+	float Radius;
 	float AttenuationConstant;
 	float AttenuationLinear;
 	float AttenuationQuadratic;
@@ -109,6 +107,7 @@ private:
 
 	ID3D12DescriptorHeap* _RTVDescriptorHeap = nullptr;
 	ID3D12DescriptorHeap* _MeshDescriptorHeap = nullptr;
+	ID3D12DescriptorHeap* _ResourceDescriptorHeap = nullptr;
 	unsigned int _RTVDescriptorSize = 0;
 	unsigned int _SRVDescriptorSize = 0;
 
@@ -122,7 +121,10 @@ private:
 	D3D12_RAYTRACING_INSTANCE_DESC* _SceneInstanceData = nullptr; // The mapped contents of `_SceneInstanceBuffer`
 	bool _RebuildTopLevel = true;
 
-	ID3D12RootSignature* _RootSignature = nullptr;
+	// Point light baking
+	ID3D12Resource* _PointLightConstantBuffer = nullptr;
+	struct PointLightConstants* _PointLightConstantData = nullptr;
+	ID3D12RootSignature* _PointLightRootSignature = nullptr;
 	ID3D12PipelineState* _PointLightPipelineState = nullptr;
 
 	MeshFormat _MeshFormat;
@@ -140,12 +142,15 @@ private:
 	 */
 	void CleanupOutputBuffer(const OutputBuffer* outputBuffer);
 	void ExecuteAndReset();
-	void TransitionResource(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
+	void TransitionResource(ID3D12Resource* resource, enum D3D12_RESOURCE_STATES before, enum D3D12_RESOURCE_STATES after);
 	void RebuildTopLevelIfNeeded();
 	ID3D12Resource* CreateBuffer(size_t size, const char* data);
-	ID3D12Resource* CreateTexture(size_t width, size_t height, size_t stride, DXGI_FORMAT format, const char* data);
-	ID3D12Resource* CreateResource(const D3D12_RESOURCE_DESC* description, size_t stride, size_t dataSize, const char* data);
-	ID3D12Resource* CreateUAV(size_t size, D3D12_RESOURCE_STATES initialState);
+	ID3D12Resource* CreateTexture(size_t width, size_t height, size_t stride, enum DXGI_FORMAT format, const char* data);
+	ID3D12Resource* CreateResource(const struct D3D12_RESOURCE_DESC* description, size_t stride, size_t dataSize, const char* data);
+	ID3D12Resource* CreateUAV(size_t size, enum D3D12_RESOURCE_STATES initialState);
+	ID3D12Resource* CreateConstantBuffer(size_t size);
+	ID3D12RootSignature* CreateRootSignature(const struct D3D12_ROOT_SIGNATURE_DESC* desc);
+	struct D3D12_GPU_DESCRIPTOR_HANDLE GetBakeResource(enum class BakeResource resource) const;
 
 public:
 	~Starlight();
