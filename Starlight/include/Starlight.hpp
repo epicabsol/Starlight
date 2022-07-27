@@ -22,6 +22,7 @@ struct LoadedMesh;
 #include "DirectXMath.h"
 
 #define STARLIGHT_MAX_MESHES (0xFF)
+#define STARLIGHT_BUFFER_COUNT (2)
 
 struct MeshFormat
 {
@@ -108,10 +109,12 @@ private:
 	ID3D12DescriptorHeap* _RTVDescriptorHeap = nullptr;
 	ID3D12DescriptorHeap* _MeshDescriptorHeap = nullptr;
 	ID3D12DescriptorHeap* _ResourceDescriptorHeap = nullptr;
+	ID3D12DescriptorHeap* _SamplerDescriptorHeap = nullptr;
 	unsigned int _RTVDescriptorSize = 0;
 	unsigned int _SRVDescriptorSize = 0;
 
-	ID3D12Resource* _LightmaskBuffer = nullptr;
+	ID3D12Resource* _LightmaskBuffers[STARLIGHT_BUFFER_COUNT] = { };
+	size_t _LatestLightmaskBuffer = 0;
 	ID3D12Resource* _ReadbackBuffer = nullptr;
 
 	// Raytracing resources

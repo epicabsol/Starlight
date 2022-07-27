@@ -3,6 +3,9 @@
 #define SAMPLE_COUNT (1000)
 
 RaytracingAccelerationStructure TLAS : register(t0);
+Texture2D<float4> PreviousIrradianceTexture : register(t1);
+
+SamplerState LightmapSampler : register(s0);
 
 cbuffer PointLightConstantBuffer : register(b0)
 {
@@ -35,7 +38,6 @@ float SampleOcclusion(float3 start, float3 direction)
         return 1.0f;
 
     }
-    
 }
 
 float4 PSMain(LightmapPixel input) : SV_Target0
@@ -66,5 +68,7 @@ float4 PSMain(LightmapPixel input) : SV_Target0
     // The total irradiance recieved from a point light is just the radiance - there is only the one ray contributing, all else is zero
     float3 irradiance = radiance * visibility;
     
-    return float4(irradiance, 1.0f);
+    float3 previousIrradiance = PreviousIrradianceTexture.Sample(LightmapSampler, input.LightmapCoord * float2(1.0f, -1.0f)).xyz;
+    
+    return float4(irradiance + previousIrradiance, 1.0f);
 }

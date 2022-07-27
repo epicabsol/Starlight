@@ -17,6 +17,8 @@
 enum class BakeResource
 {
 	PointLightConstantBuffer,
+	LightmaskBuffers,
+	LastLightMaskBuffer = LightmaskBuffers + STARLIGHT_BUFFER_COUNT - 1,
 	Count,
 };
 
@@ -59,17 +61,26 @@ Starlight::Starlight(ID3D12Device* device, const MeshFormat& meshFormat) : _Mesh
 	this->_FenceEvent = CreateEventW(nullptr, false, false, nullptr);
 
 	// RTV descriptor heap (one single descriptor)
-	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 1, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
+	D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_RTV, STARLIGHT_BUFFER_COUNT, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
 	device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&this->_RTVDescriptorHeap));
+	this->_RTVDescriptorHeap->SetName(L"RTVDescriptorHeap");
 
 	// Mesh descriptor heap (three descriptors per mesh)
 	D3D12_DESCRIPTOR_HEAP_DESC meshHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, STARLIGHT_MAX_MESHES * DESCRIPTORS_PER_MESH, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
 	device->CreateDescriptorHeap(&meshHeapDesc, IID_PPV_ARGS(&this->_MeshDescriptorHeap));
+	this->_MeshDescriptorHeap->SetName(L"MeshDescriptorHeap");
 
 	// Resource descriptor heap (one descriptor per BakeResource enum member)
 	D3D12_DESCRIPTOR_HEAP_DESC resourceHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (unsigned int)BakeResource::Count, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0 };
 	device->CreateDescriptorHeap(&resourceHeapDesc, IID_PPV_ARGS(&this->_ResourceDescriptorHeap));
 	this->_ResourceDescriptorHeap->SetName(L"ResourceDescriptorHeap");
+
+	// Sampler descriptor heap
+	D3D12_DESCRIPTOR_HEAP_DESC samplerHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 1, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0 };
+	device->CreateDescriptorHeap(&samplerHeapDesc, IID_PPV_ARGS(&this->_SamplerDescriptorHeap));
+	this->_SamplerDescriptorHeap->SetName(L"SamplerDescriptorHeap");
+	D3D12_SAMPLER_DESC samplerDesc = { D3D12_FILTER_MIN_MAG_MIP_LINEAR, D3D12_TEXTURE_ADDRESS_MODE_WRAP, D3D12_TEXTURE_ADDRESS_MODE_WRAP, D3D12_TEXTURE_ADDRESS_MODE_WRAP, 0.0f, 0, D3D12_COMPARISON_FUNC_ALWAYS, { 0.0f, 0.0f, 0.0f, 0.0f }, 0.0f, 100000.0f };
+	device->CreateSampler(&samplerDesc, this->_SamplerDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
 	// Allocate the top-level acceleration structure buffer and associated scratch buffer
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
@@ -99,10 +110,14 @@ Starlight::Starlight(ID3D12Device* device, const MeshFormat& meshFormat) : _Mesh
 	this->_PointLightConstantBuffer->Map(0, &emptyRange, (void**)&this->_PointLightConstantData);
 
 	// Pipeline State for point lights
-	CD3DX12_ROOT_PARAMETER rootParameters[2] = { };
+	CD3DX12_ROOT_PARAMETER rootParameters[4] = { };
 	rootParameters[0].InitAsShaderResourceView(0);
 	D3D12_DESCRIPTOR_RANGE pointLightConstantsRange = CD3DX12_DESCRIPTOR_RANGE(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
 	rootParameters[1].InitAsDescriptorTable(1, &pointLightConstantsRange);
+	D3D12_DESCRIPTOR_RANGE previousIrradianceRange = CD3DX12_DESCRIPTOR_RANGE(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+	rootParameters[2].InitAsDescriptorTable(1, &previousIrradianceRange);
+	D3D12_DESCRIPTOR_RANGE samplerRange = CD3DX12_DESCRIPTOR_RANGE(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 1, 0);
+	rootParameters[3].InitAsDescriptorTable(1, &samplerRange);
 	D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = CD3DX12_ROOT_SIGNATURE_DESC(sizeof(rootParameters) / sizeof(rootParameters[0]), rootParameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 	this->_PointLightRootSignature = this->CreateRootSignature(&rootSignatureDesc);
 	
@@ -137,17 +152,31 @@ void Starlight::PrepareOutputBuffer(const OutputBuffer* outputBuffer)
 {
 	float clearColor[] = { 1.0f, 0.0f, 0.0f, 1.0f };
 	D3D12_CLEAR_VALUE clearValue = CD3DX12_CLEAR_VALUE(DXGI_FORMAT_R8G8B8A8_UNORM, clearColor);
+	D3D12_VIEWPORT viewport = { 0.0f, 0.0f, (float)outputBuffer->Width, (float)outputBuffer->Height, 0.0f, 1.0f };
+	this->_CommandList->RSSetViewports(1, &viewport);
 
 	// TODO: Keep the lightmask buffer around and reuse it if its dimensions and format match
 
-	// Create lightmask buffer
-	D3D12_RESOURCE_DESC lightmaskDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, (unsigned int)outputBuffer->Width, (unsigned int)outputBuffer->Height, 1, 1, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
-	D3D12_HEAP_PROPERTIES lightmaskHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-	this->_Device->CreateCommittedResource(&lightmaskHeap, D3D12_HEAP_FLAG_NONE, &lightmaskDesc, D3D12_RESOURCE_STATE_RENDER_TARGET, &clearValue, IID_PPV_ARGS(&this->_LightmaskBuffer));
-	this->_LightmaskBuffer->SetName(L"LightmaskBuffer");
+	// Create lightmask buffers
+	for (size_t i = 0; i < STARLIGHT_BUFFER_COUNT; i++)
+	{
+		D3D12_RESOURCE_DESC lightmaskDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, (unsigned int)outputBuffer->Width, (unsigned int)outputBuffer->Height, 1, 1, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+		D3D12_HEAP_PROPERTIES lightmaskHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+		this->_Device->CreateCommittedResource(&lightmaskHeap, D3D12_HEAP_FLAG_NONE, &lightmaskDesc, i == 0 ? D3D12_RESOURCE_STATE_RENDER_TARGET : D3D12_RESOURCE_STATE_COMMON, &clearValue, IID_PPV_ARGS(&this->_LightmaskBuffers[i]));
+		
+		wchar_t bufferName[255] = { '\0' };
+		wsprintfW(bufferName, L"LightMaskBuffer[%u]", (int)i);
+		
+		this->_LightmaskBuffers[i]->SetName(bufferName);
 
-	// Put the lightmask descriptor in slot 0 of the RTV descriptor heap
-	this->_Device->CreateRenderTargetView(this->_LightmaskBuffer, nullptr, this->_RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+		// Create the RTV descriptor in slot i of the RTV descriptor heap
+		D3D12_CPU_DESCRIPTOR_HANDLE lightmaskRTVDescriptorHandle = { this->_RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr + this->_RTVDescriptorSize * i };
+		this->_Device->CreateRenderTargetView(this->_LightmaskBuffers[i], nullptr, lightmaskRTVDescriptorHandle);
+
+		// Create the SRV descriptor
+		D3D12_CPU_DESCRIPTOR_HANDLE lightmaskSRVDescriptorHandle = { this->_ResourceDescriptorHeap->GetCPUDescriptorHandleForHeapStart().ptr + this->_SRVDescriptorSize * ((size_t)BakeResource::LightmaskBuffers + i) };
+		this->_Device->CreateShaderResourceView(this->_LightmaskBuffers[i], nullptr, lightmaskSRVDescriptorHandle);
+	}
 	
 	// Create readback buffer
 	//D3D12_RESOURCE_DESC readbackDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, (unsigned int)outputBuffer->Width, (unsigned int)outputBuffer->Height, 1, 1, 1, 0, D3D12_RESOURCE_FLAG_NONE);
@@ -156,19 +185,15 @@ void Starlight::PrepareOutputBuffer(const OutputBuffer* outputBuffer)
 	this->_Device->CreateCommittedResource(&readbackHeap, D3D12_HEAP_FLAG_NONE, &readbackDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&this->_ReadbackBuffer));
 	this->_ReadbackBuffer->SetName(L"ReadbackBuffer");
 
-	// Clear the lightmask
-	D3D12_VIEWPORT viewport = { 0.0f, 0.0f, (float)outputBuffer->Width, (float)outputBuffer->Height, 0.0f, 1.0f };
-	this->_CommandList->RSSetViewports(1, &viewport);
-	this->_CommandList->ClearRenderTargetView(this->_RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), clearColor, 0, nullptr);
-
 	this->ExecuteAndReset();
 }
 
 void Starlight::CleanupOutputBuffer(const OutputBuffer* outputBuffer)
 {
-	this->TransitionResource(this->_LightmaskBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+	// Download the pixel data from the latest lightmask buffer
+	this->TransitionResource(this->_LightmaskBuffers[this->_LatestLightmaskBuffer], D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE);
 
-	D3D12_TEXTURE_COPY_LOCATION source = CD3DX12_TEXTURE_COPY_LOCATION(this->_LightmaskBuffer, 0);
+	D3D12_TEXTURE_COPY_LOCATION source = CD3DX12_TEXTURE_COPY_LOCATION(this->_LightmaskBuffers[this->_LatestLightmaskBuffer], 0);
 	D3D12_PLACED_SUBRESOURCE_FOOTPRINT destinationFootprint = { 0, { DXGI_FORMAT_R8G8B8A8_UNORM, (unsigned int)outputBuffer->Width, (unsigned int)outputBuffer->Height, 1, (unsigned int)outputBuffer->Stride } };
 	D3D12_TEXTURE_COPY_LOCATION destination = CD3DX12_TEXTURE_COPY_LOCATION(this->_ReadbackBuffer, destinationFootprint);
 	this->_CommandList->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
@@ -185,8 +210,11 @@ void Starlight::CleanupOutputBuffer(const OutputBuffer* outputBuffer)
 	this->_ReadbackBuffer->Release();
 	this->_ReadbackBuffer = nullptr;
 
-	this->_LightmaskBuffer->Release();
-	this->_LightmaskBuffer = nullptr;
+	for (size_t i = 0; i < STARLIGHT_BUFFER_COUNT; i++)
+	{
+		this->_LightmaskBuffers[i]->Release();
+		this->_LightmaskBuffers[i] = nullptr;
+	}
 }
 
 void Starlight::ExecuteAndReset()
@@ -391,6 +419,9 @@ Starlight::~Starlight()
 	this->_SceneBuildScratchBuffer->Release();
 	this->_SceneBuildScratchBuffer = nullptr;
 
+	this->_SamplerDescriptorHeap->Release();
+	this->_SamplerDescriptorHeap = nullptr;
+
 	this->_ResourceDescriptorHeap->Release();
 	this->_ResourceDescriptorHeap = nullptr;
 
@@ -522,32 +553,55 @@ void Starlight::BakePointLight(const PointLight* pointLight, const OutputBuffer*
 
 	this->PrepareOutputBuffer(outputBuffer);
 
+	this->_LatestLightmaskBuffer = STARLIGHT_BUFFER_COUNT - 1;
+	
 	this->_PointLightConstantData->Light = *pointLight;
 
 	this->_CommandList->SetPipelineState(this->_PointLightPipelineState);
 	this->_CommandList->SetGraphicsRootSignature(this->_PointLightRootSignature);
 	this->_CommandList->SetGraphicsRootShaderResourceView(0, this->_SceneAccelerationStructure->GetGPUVirtualAddress());
-	this->_CommandList->SetDescriptorHeaps(1, &this->_ResourceDescriptorHeap);
+	ID3D12DescriptorHeap* descriptorHeaps[] = {
+		this->_ResourceDescriptorHeap,
+		this->_SamplerDescriptorHeap,
+	};
+	this->_CommandList->SetDescriptorHeaps(sizeof(descriptorHeaps) / sizeof(descriptorHeaps[0]), descriptorHeaps);
 	this->_CommandList->SetGraphicsRootDescriptorTable(1, this->GetBakeResource(BakeResource::PointLightConstantBuffer));
+	this->_CommandList->SetGraphicsRootDescriptorTable(3, this->_SamplerDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 	
 	D3D12_VIEWPORT viewport = CD3DX12_VIEWPORT(0.0f, 0.0f, (float)outputBuffer->Width, (float)outputBuffer->Height);
 	this->_CommandList->RSSetViewports(1, &viewport);
 	D3D12_RECT scissor = { 0, 0, outputBuffer->Width, outputBuffer->Height };
 	this->_CommandList->RSSetScissorRects(1, &scissor);
-	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(this->_RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), 0, this->_RTVDescriptorSize);
-	this->_CommandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
 	
 	this->_CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	// Draw each of the meshes
-	for (size_t i = 0; i < this->_MeshCount; i++)
+	const size_t bounces = 5;
+	for (size_t bounce = 0; bounce < bounces; bounce++)
 	{
-		D3D12_VERTEX_BUFFER_VIEW vertexBuffer = { this->_Meshes[i].VertexBuffer->GetGPUVirtualAddress(), this->_Meshes[i].VertexCount * this->GetMeshFormat().VertexSize, this->GetMeshFormat().VertexSize };
-		this->_CommandList->IASetVertexBuffers(0, 1, &vertexBuffer);
-		D3D12_INDEX_BUFFER_VIEW indexBuffer = { this->_Meshes[i].IndexBuffer->GetGPUVirtualAddress(), this->_Meshes[i].IndexCount * this->GetMeshFormat().IndexSize, this->_Meshes[i].IndexFormat };
-		this->_CommandList->IASetIndexBuffer(&indexBuffer);
-		this->_CommandList->DrawIndexedInstanced(this->_Meshes[i].IndexCount, 1, 0, 0, 0);
+		D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(this->_RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), (this->_LatestLightmaskBuffer + 1) % STARLIGHT_BUFFER_COUNT, this->_RTVDescriptorSize);
+		this->_CommandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
+
+		this->_CommandList->SetGraphicsRootDescriptorTable(2, this->GetBakeResource((BakeResource)((size_t)BakeResource::LightmaskBuffers + this->_LatestLightmaskBuffer)));
+
+		// Draw each of the meshes
+		for (size_t i = 0; i < this->_MeshCount; i++)
+		{
+			D3D12_VERTEX_BUFFER_VIEW vertexBuffer = { this->_Meshes[i].VertexBuffer->GetGPUVirtualAddress(), this->_Meshes[i].VertexCount * this->GetMeshFormat().VertexSize, this->GetMeshFormat().VertexSize };
+			this->_CommandList->IASetVertexBuffers(0, 1, &vertexBuffer);
+			D3D12_INDEX_BUFFER_VIEW indexBuffer = { this->_Meshes[i].IndexBuffer->GetGPUVirtualAddress(), this->_Meshes[i].IndexCount * this->GetMeshFormat().IndexSize, this->_Meshes[i].IndexFormat };
+			this->_CommandList->IASetIndexBuffer(&indexBuffer);
+			this->_CommandList->DrawIndexedInstanced(this->_Meshes[i].IndexCount, 1, 0, 0, 0);
+		}
+
+		D3D12_RESOURCE_BARRIER barriers[] = {
+			CD3DX12_RESOURCE_BARRIER::Transition(this->_LightmaskBuffers[(this->_LatestLightmaskBuffer + 1) % STARLIGHT_BUFFER_COUNT], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COMMON),
+			CD3DX12_RESOURCE_BARRIER::Transition(this->_LightmaskBuffers[(this->_LatestLightmaskBuffer + 2) % STARLIGHT_BUFFER_COUNT], D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_RENDER_TARGET),
+		};
+		this->_CommandList->ResourceBarrier(sizeof(barriers) / sizeof(barriers[0]), barriers);
+
+		this->_LatestLightmaskBuffer = (this->_LatestLightmaskBuffer + 1) % STARLIGHT_BUFFER_COUNT;
 	}
+
 	this->ExecuteAndReset();
 
 	this->CleanupOutputBuffer(outputBuffer);

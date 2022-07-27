@@ -65,7 +65,7 @@ void EnableD3D12DebugLayer()
 		debugController->Release();
 	}
 
-	HMODULE dxgiDebug = GetModuleHandleW(L"Dxgidebug.dll");
+	HMODULE dxgiDebug = LoadLibraryW(L"Dxgidebug.dll");
 	if (dxgiDebug != nullptr)
 	{
 		DXGIGetDebugInterface_t dxgiGetDebugInterface = (DXGIGetDebugInterface_t)GetProcAddress(dxgiDebug, "DXGIGetDebugInterface");
@@ -93,6 +93,8 @@ void ReportDXGILeaks()
 		_DXGIDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
 		_DXGIDebug->Release();
 		_DXGIDebug = nullptr;
+
+		// TODO: Free dxgidebug.dll
 	}
 }
 
