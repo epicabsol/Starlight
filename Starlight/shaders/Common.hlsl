@@ -53,3 +53,12 @@ float3 hemisphereProjectionCosine(float u, float v)
     float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
     return float3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
 }
+
+float3 JitterPosition(float3 position, float3 tangent, float3 bitangent, uint sample, uint sampleCount)
+{
+    // Approximate the world-space width and height of one lightmap texel
+    float texelSize = lerp(length(ddx_fine(position)), length(ddy_fine(position)), 0.5f);
+    
+    float2 jitter = hammersley2d(sample, sampleCount) - float2(0.5f, 0.5f);
+    return position + (jitter.x * tangent + jitter.y * bitangent) * texelSize;
+}

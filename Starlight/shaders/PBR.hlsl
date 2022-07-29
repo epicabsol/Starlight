@@ -155,3 +155,27 @@ float3 IndirectIrradiance(float3 position, float3 normal, float3 tangent, float3
     
     return irradiance;
 }
+
+/**
+ * Determines whether there is any geometry occluding the segment from start to end. (0.0f: occluded, 1.0f: not occluded)
+ */
+float SampleOcclusion(float3 start, float3 end)
+{
+    RayQuery<RAY_FLAG_NONE> q;
+    RayDesc ray;
+    ray.Origin = start;
+    ray.Direction = end - start;
+    ray.TMin = 0.0f;
+    ray.TMax = 1.0f;
+    q.TraceRayInline(TLAS, RAY_FLAG_NONE, 0xFF, ray);
+    
+    q.Proceed();
+    if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
+    {
+        return 0.0f;
+    }
+    else
+    {
+        return 1.0f;
+    }
+}

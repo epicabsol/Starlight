@@ -129,6 +129,12 @@ private:
 	ID3D12RootSignature* _PointLightRootSignature = nullptr;
 	ID3D12PipelineState* _PointLightPipelineState = nullptr;
 
+	// Directional light baking
+	ID3D12Resource* _DirectionalLightConstantBuffer = nullptr;
+	struct DirectionalLightConstants* _DirectionalLightConstantData = nullptr;
+	ID3D12RootSignature* _DirectionalLightRootSignature = nullptr;
+	ID3D12PipelineState* _DirectionalLightPipelineState = nullptr;
+
 	MeshFormat _MeshFormat;
 	LoadedMesh* _Meshes;
 	size_t _MeshCount;
@@ -146,13 +152,15 @@ private:
 	void ExecuteAndReset();
 	void TransitionResource(ID3D12Resource* resource, enum D3D12_RESOURCE_STATES before, enum D3D12_RESOURCE_STATES after);
 	void RebuildTopLevelIfNeeded();
+	void BakeLight(struct ID3D12PipelineState* pipelineState, struct ID3D12RootSignature* rootSignature, enum class BakeResource constantBuffer, const OutputBuffer* outputBuffer);
 	ID3D12Resource* CreateBuffer(size_t size, const char* data);
 	ID3D12Resource* CreateTexture(size_t width, size_t height, size_t stride, enum DXGI_FORMAT format, const char* data);
 	ID3D12Resource* CreateResource(const struct D3D12_RESOURCE_DESC* description, size_t stride, size_t dataSize, const char* data);
 	ID3D12Resource* CreateUAV(size_t size, enum D3D12_RESOURCE_STATES initialState);
 	ID3D12Resource* CreateConstantBuffer(size_t size);
 	ID3D12RootSignature* CreateRootSignature(const struct D3D12_ROOT_SIGNATURE_DESC* desc);
-	struct D3D12_GPU_DESCRIPTOR_HANDLE GetBakeResource(enum class BakeResource resource) const;
+	struct D3D12_CPU_DESCRIPTOR_HANDLE GetBakeResourceCPU(enum class BakeResource resource) const;
+	struct D3D12_GPU_DESCRIPTOR_HANDLE GetBakeResourceGPU(enum class BakeResource resource) const;
 	struct D3D12_CPU_DESCRIPTOR_HANDLE GetMeshResourceCPU(size_t mesh, enum class MeshResource resource) const;
 	struct D3D12_GPU_DESCRIPTOR_HANDLE GetMeshResourceGPU(size_t mesh, enum class MeshResource resource) const;
 

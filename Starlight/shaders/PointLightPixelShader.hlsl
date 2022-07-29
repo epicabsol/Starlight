@@ -12,28 +12,7 @@ cbuffer PointLightConstantBuffer : register(b0)
     float _Padding;
 }
 
-float SampleOcclusion(float3 start, float3 direction)
-{
-    RayQuery<RAY_FLAG_NONE> q;
-    RayDesc ray;
-    ray.Origin = start;
-    ray.Direction = direction;
-    ray.TMin = 0.0f;
-    ray.TMax = 1.0f;
-    q.TraceRayInline(TLAS, RAY_FLAG_NONE, 0xFF, ray);
-    
-    q.Proceed();
-    if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
-    {
-        return 0.0f;
-    }
-    else
-    {
-        return 1.0f;
-    }
-}
-
-float3 PointLightIrradiance(float3 position, float3 normal, float3 lightPosition)
+float3 PointLightIrradiance(float3 position, float3 normal, float3 tangent, float3 bitangent, float3 lightPosition)
 {
     float3 lightForward = normalize(position - lightPosition);
     float3 lightSide = cross(lightForward, float3(0, 1, 0));
@@ -43,13 +22,14 @@ float3 PointLightIrradiance(float3 position, float3 normal, float3 lightPosition
     for (uint i = 0; i < POINT_SHADOW_SAMPLE_COUNT; i++)
     {
         float2 hammersley = hammersley2d(i, POINT_SHADOW_SAMPLE_COUNT);
-        float3 localDirection = hemisphereProjectionUniform(hammersley.x, hammersley.y);
+        float3 localDirection = hemisphereProjectionCosine(hammersley.x, hammersley.y);
             
         float3 lightOffset = localDirection.x * lightSide + localDirection.y * lightUp + localDirection.z * lightForward;
+        float3 jitteredPosition = JitterPosition(position, tangent, bitangent, i, POINT_SHADOW_SAMPLE_COUNT);
         float3 endPoint = lightPosition + lightOffset * Radius;
-        float3 startPosition = position + normal * 0.001f;
+        float3 startPosition = jitteredPosition + normal * 0.001f;
         
-        visibility += SampleOcclusion(startPosition, endPoint - startPosition);
+        visibility += SampleOcclusion(startPosition, endPoint);
     }
     visibility = visibility / POINT_SHADOW_SAMPLE_COUNT;
     
@@ -64,7 +44,7 @@ float3 PointLightIrradiance(float3 position, float3 normal, float3 lightPosition
 
 float4 PSMain(LightmapPixel input) : SV_Target0
 {
-    float3 directIrradiance = PointLightIrradiance(input.WorldPosition, input.WorldNormal, WorldPosition);
+    float3 directIrradiance = PointLightIrradiance(input.WorldPosition, input.WorldNormal, input.WorldTangent, input.WorldBitangent, WorldPosition);
     
     float3 indirectIrradiance = IndirectIrradiance(input.WorldPosition, input.WorldNormal, input.WorldTangent, input.WorldBitangent, float3(input.LightmapCoord, 0.0f));
     

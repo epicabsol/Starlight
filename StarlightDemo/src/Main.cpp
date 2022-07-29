@@ -20,7 +20,6 @@ using namespace DirectX;
 #define BYTES_PER_PIXEL (4)
 #define LIGHT_MASK_RESOLUTION (1024)
 #define INPUT_MESH_FILENAME "test_mesh.obj"
-#define OUTPUT_FILENAME "output.png"
 
 struct DemoVertex {
 	XMFLOAT3 Position;
@@ -233,7 +232,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 	// Load the mesh in suzanne.obj
 	tinyobj::ObjReaderConfig readerConfig;
 	tinyobj::ObjReader reader;
-	if (reader.ParseFromFile("assets/boxScene.obj"))
+	if (reader.ParseFromFile("assets/roomThing.obj"))
 	{
 		if (!reader.Warning().empty())
 		{
@@ -307,9 +306,18 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 	_Starlight->BakePointLight(&pointLight, &pointLightMask);
 
 	// Save point light's mask's pixel data, which is in `pointLightMaskBytes` - or do whatever else you want with it
-	stbi_write_png(OUTPUT_FILENAME, LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION, 4, pointLightMaskBytes, (int)stride);
+	stbi_write_png("output.png", LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION, 4, pointLightMaskBytes, (int)stride);
 
 	delete[] pointLightMaskBytes;
+
+	DirectionalLight directionalLight = { { 1.0f, -3.0f, -2.0f } };
+	uint8_t* directionalLightMaskBytes = new uint8_t[stride * LIGHT_MASK_RESOLUTION];
+	OutputBuffer directionalLightMask = { &directionalLightMaskBytes[0], stride, LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION };
+	_Starlight->BakeDirectionalLight(&directionalLight, &directionalLightMask);
+
+	stbi_write_png("output_directional.png", LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION, 4, directionalLightMaskBytes, (int)stride);
+
+	delete[] directionalLightMaskBytes;
 
 	//
 	// CLEANUP
