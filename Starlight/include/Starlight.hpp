@@ -107,7 +107,6 @@ private:
 	uint64_t _FenceValue = 1;
 
 	ID3D12DescriptorHeap* _RTVDescriptorHeap = nullptr;
-	ID3D12DescriptorHeap* _MeshDescriptorHeap = nullptr;
 	ID3D12DescriptorHeap* _ResourceDescriptorHeap = nullptr;
 	ID3D12DescriptorHeap* _SamplerDescriptorHeap = nullptr;
 	unsigned int _RTVDescriptorSize = 0;
@@ -154,6 +153,8 @@ private:
 	ID3D12Resource* CreateConstantBuffer(size_t size);
 	ID3D12RootSignature* CreateRootSignature(const struct D3D12_ROOT_SIGNATURE_DESC* desc);
 	struct D3D12_GPU_DESCRIPTOR_HANDLE GetBakeResource(enum class BakeResource resource) const;
+	struct D3D12_CPU_DESCRIPTOR_HANDLE GetMeshResourceCPU(size_t mesh, enum class MeshResource resource) const;
+	struct D3D12_GPU_DESCRIPTOR_HANDLE GetMeshResourceGPU(size_t mesh, enum class MeshResource resource) const;
 
 public:
 	~Starlight();

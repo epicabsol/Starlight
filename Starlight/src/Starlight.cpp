@@ -11,14 +11,26 @@
 
 #include "LoadedMesh.hpp"
 
-// Three descriptors per mesh - constant buffer, diffuse texture, NormalRoughnessMetallic texture
-#define DESCRIPTORS_PER_MESH (3)
+#define BAKE_RESOURCE_RANGE(Name) Name##s, Last##Name = Name##s + STARLIGHT_MAX_MESHES - 1
 
 enum class BakeResource
 {
 	PointLightConstantBuffer,
 	LightmaskBuffers,
 	LastLightMaskBuffer = LightmaskBuffers + STARLIGHT_BUFFER_COUNT - 1,
+	BAKE_RESOURCE_RANGE(VertexBuffer),
+	BAKE_RESOURCE_RANGE(IndexBuffer),
+	BAKE_RESOURCE_RANGE(ConstantBuffer),
+	Count,
+};
+
+enum class MeshResource
+{
+	VertexBuffer,
+	IndexBuffer,
+	ConstantBuffer,
+	DiffuseTexture,
+	NormalRoughnessMetallicTexture,
 	Count,
 };
 
@@ -65,11 +77,6 @@ Starlight::Starlight(ID3D12Device* device, const MeshFormat& meshFormat) : _Mesh
 	device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&this->_RTVDescriptorHeap));
 	this->_RTVDescriptorHeap->SetName(L"RTVDescriptorHeap");
 
-	// Mesh descriptor heap (three descriptors per mesh)
-	D3D12_DESCRIPTOR_HEAP_DESC meshHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, STARLIGHT_MAX_MESHES * DESCRIPTORS_PER_MESH, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
-	device->CreateDescriptorHeap(&meshHeapDesc, IID_PPV_ARGS(&this->_MeshDescriptorHeap));
-	this->_MeshDescriptorHeap->SetName(L"MeshDescriptorHeap");
-
 	// Resource descriptor heap (one descriptor per BakeResource enum member)
 	D3D12_DESCRIPTOR_HEAP_DESC resourceHeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, (unsigned int)BakeResource::Count, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0 };
 	device->CreateDescriptorHeap(&resourceHeapDesc, IID_PPV_ARGS(&this->_ResourceDescriptorHeap));
@@ -110,7 +117,7 @@ Starlight::Starlight(ID3D12Device* device, const MeshFormat& meshFormat) : _Mesh
 	this->_PointLightConstantBuffer->Map(0, &emptyRange, (void**)&this->_PointLightConstantData);
 
 	// Pipeline State for point lights
-	CD3DX12_ROOT_PARAMETER rootParameters[4] = { };
+	CD3DX12_ROOT_PARAMETER rootParameters[6] = { };
 	rootParameters[0].InitAsShaderResourceView(0);
 	D3D12_DESCRIPTOR_RANGE pointLightConstantsRange = CD3DX12_DESCRIPTOR_RANGE(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
 	rootParameters[1].InitAsDescriptorTable(1, &pointLightConstantsRange);
@@ -118,6 +125,10 @@ Starlight::Starlight(ID3D12Device* device, const MeshFormat& meshFormat) : _Mesh
 	rootParameters[2].InitAsDescriptorTable(1, &previousIrradianceRange);
 	D3D12_DESCRIPTOR_RANGE samplerRange = CD3DX12_DESCRIPTOR_RANGE(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 1, 0);
 	rootParameters[3].InitAsDescriptorTable(1, &samplerRange);
+	D3D12_DESCRIPTOR_RANGE meshVerticesRange = CD3DX12_DESCRIPTOR_RANGE(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, STARLIGHT_MAX_MESHES, 0, 1);
+	rootParameters[4].InitAsDescriptorTable(1, &meshVerticesRange);
+	D3D12_DESCRIPTOR_RANGE meshIndicesRange = CD3DX12_DESCRIPTOR_RANGE(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, STARLIGHT_MAX_MESHES, 0, 2);
+	rootParameters[5].InitAsDescriptorTable(1, &meshIndicesRange);
 	D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = CD3DX12_ROOT_SIGNATURE_DESC(sizeof(rootParameters) / sizeof(rootParameters[0]), rootParameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 	this->_PointLightRootSignature = this->CreateRootSignature(&rootSignatureDesc);
 	
@@ -379,6 +390,16 @@ D3D12_GPU_DESCRIPTOR_HANDLE Starlight::GetBakeResource(BakeResource resource) co
 	return CD3DX12_GPU_DESCRIPTOR_HANDLE(this->_ResourceDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), (unsigned int)resource, this->_SRVDescriptorSize);
 }
 
+D3D12_CPU_DESCRIPTOR_HANDLE Starlight::GetMeshResourceCPU(size_t mesh, MeshResource resource) const
+{
+	return CD3DX12_CPU_DESCRIPTOR_HANDLE(this->_ResourceDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), (unsigned int)BakeResource::VertexBuffers + (unsigned int)resource * STARLIGHT_MAX_MESHES + (unsigned int)mesh, this->_SRVDescriptorSize);
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE Starlight::GetMeshResourceGPU(size_t mesh, MeshResource resource) const
+{
+	return CD3DX12_GPU_DESCRIPTOR_HANDLE(this->_ResourceDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), (unsigned int)BakeResource::VertexBuffers + (unsigned int)resource * STARLIGHT_MAX_MESHES + (unsigned int)mesh, this->_SRVDescriptorSize);
+}
+
 Starlight::~Starlight()
 {
 	for (size_t i = 0; i < this->_MeshCount; i++)
@@ -424,9 +445,6 @@ Starlight::~Starlight()
 
 	this->_ResourceDescriptorHeap->Release();
 	this->_ResourceDescriptorHeap = nullptr;
-
-	this->_MeshDescriptorHeap->Release();
-	this->_MeshDescriptorHeap = nullptr;
 
 	this->_RTVDescriptorHeap->Release();
 	this->_RTVDescriptorHeap = nullptr;
@@ -480,11 +498,25 @@ void Starlight::AddMesh(const MeshInfo* meshInfo, const MaterialInfo* materialIn
 	mesh->VertexBuffer = this->CreateBuffer(meshInfo->VertexSize * meshInfo->VertexCount, (const char*)meshInfo->VertexData);
 	mesh->VertexSize = meshInfo->VertexSize;
 	mesh->VertexCount = meshInfo->VertexCount;
+	D3D12_SHADER_RESOURCE_VIEW_DESC vbDesc = {
+		DXGI_FORMAT_UNKNOWN,
+		D3D12_SRV_DIMENSION_BUFFER,
+		D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+	};
+	vbDesc.Buffer = { 0, (unsigned int)meshInfo->VertexCount, (unsigned int)meshInfo->VertexSize, D3D12_BUFFER_SRV_FLAG_NONE };
+	this->_Device->CreateShaderResourceView(mesh->VertexBuffer, &vbDesc, this->GetMeshResourceCPU(this->_MeshCount, MeshResource::VertexBuffer));
 	
 	// Indices
 	mesh->IndexBuffer = this->CreateBuffer(meshInfo->IndexSize * meshInfo->IndexCount, (const char*)meshInfo->IndexData);
 	mesh->IndexFormat = indexFormat;
 	mesh->IndexCount = meshInfo->IndexCount;
+	D3D12_SHADER_RESOURCE_VIEW_DESC ibDesc = {
+		DXGI_FORMAT_UNKNOWN,
+		D3D12_SRV_DIMENSION_BUFFER,
+		D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+	};
+	ibDesc.Buffer = { 0, (unsigned int)meshInfo->IndexCount, (unsigned int)meshInfo->IndexSize, D3D12_BUFFER_SRV_FLAG_NONE };
+	this->_Device->CreateShaderResourceView(mesh->IndexBuffer, &ibDesc, this->GetMeshResourceCPU(this->_MeshCount, MeshResource::IndexBuffer));
 
 	// Constants
 	MeshConstants constants = {
@@ -567,6 +599,8 @@ void Starlight::BakePointLight(const PointLight* pointLight, const OutputBuffer*
 	this->_CommandList->SetDescriptorHeaps(sizeof(descriptorHeaps) / sizeof(descriptorHeaps[0]), descriptorHeaps);
 	this->_CommandList->SetGraphicsRootDescriptorTable(1, this->GetBakeResource(BakeResource::PointLightConstantBuffer));
 	this->_CommandList->SetGraphicsRootDescriptorTable(3, this->_SamplerDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	this->_CommandList->SetGraphicsRootDescriptorTable(4, this->GetMeshResourceGPU(0, MeshResource::VertexBuffer));
+	this->_CommandList->SetGraphicsRootDescriptorTable(5, this->GetMeshResourceGPU(0, MeshResource::IndexBuffer));
 	
 	D3D12_VIEWPORT viewport = CD3DX12_VIEWPORT(0.0f, 0.0f, (float)outputBuffer->Width, (float)outputBuffer->Height);
 	this->_CommandList->RSSetViewports(1, &viewport);

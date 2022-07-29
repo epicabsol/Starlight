@@ -42,7 +42,7 @@ DemoVertex _PlaneVertices[] = {
 	{ { 1, 0, 1 }, { 0, 1, 0 }, { 1, 0, 0 }, { 1, 1 }, { 1, 1 } },
 	{ { -1, 0, 1 }, { 0, 1, 0 }, { 1, 0, 0 }, { 0, 1 }, { 0, 1 } },
 };
-uint16_t _PlaneIndices[] = {
+uint32_t _PlaneIndices[] = {
 	0, 1, 2,
 	0, 2, 3,
 };
@@ -99,7 +99,7 @@ void ReportDXGILeaks()
 }
 
 // Based on https://marti.works/posts/post-calculating-tangents-for-your-mesh/post/
-void ComputeTangents(DemoVertex* vertices, size_t vertexCount, uint16_t* indices, size_t indexCount)
+void ComputeTangents(DemoVertex* vertices, size_t vertexCount, uint32_t* indices, size_t indexCount)
 {
 	XMFLOAT3* tanA = new XMFLOAT3[vertexCount];
 	XMFLOAT3* tanB = new XMFLOAT3[vertexCount];
@@ -112,9 +112,9 @@ void ComputeTangents(DemoVertex* vertices, size_t vertexCount, uint16_t* indices
 
 	for (size_t i = 0; i < indexCount; i += 3)
 	{
-		uint16_t i0 = indices[i];
-		uint16_t i1 = indices[i + 1];
-		uint16_t i2 = indices[i + 2];
+		uint32_t i0 = indices[i];
+		uint32_t i1 = indices[i + 1];
+		uint32_t i2 = indices[i + 2];
 
 		XMVECTOR pos0 = XMLoadFloat3(&vertices[i0].Position);
 		XMVECTOR pos1 = XMLoadFloat3(&vertices[i1].Position);
@@ -233,7 +233,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 	// Load the mesh in suzanne.obj
 	tinyobj::ObjReaderConfig readerConfig;
 	tinyobj::ObjReader reader;
-	if (reader.ParseFromFile("assets/suzanneSubdiv.obj"))
+	if (reader.ParseFromFile("assets/boxScene.obj"))
 	{
 		if (!reader.Warning().empty())
 		{
@@ -249,7 +249,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 			// We aren't going to try merging duplicate vertices for this demo
 			// We also assume that the mesh is triangulated
 			DemoVertex* vertices = new DemoVertex[triangleCount * 3];
-			uint16_t* indices = new uint16_t[triangleCount * 3];
+			uint32_t* indices = new uint32_t[triangleCount * 3];
 
 			for (size_t j = 0; j < triangleCount; j++)
 			{
@@ -300,7 +300,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 	// DO BAKE
 	//
 
-	PointLight pointLight = { { 0, 1.1, 0 }, 0.1f, 1.0f, 0.09f, 0.032f };
+	PointLight pointLight = { { 0, 1.1, 1 }, 0.1f, 1.0f, 0.09f, 0.032f };
 	constexpr size_t stride = Align(BYTES_PER_PIXEL * LIGHT_MASK_RESOLUTION, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
 	uint8_t* pointLightMaskBytes = new uint8_t[stride * LIGHT_MASK_RESOLUTION];
 	OutputBuffer pointLightMask = { &pointLightMaskBytes[0], stride, LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION };
