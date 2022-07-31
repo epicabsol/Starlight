@@ -58,6 +58,14 @@ struct TextureInfo
 	size_t Height;
 };
 
+// Describes a single-mip R32G32B32A32 floating-point input texture array with six faces.
+struct CubeTextureInfo
+{
+	const void* FacePixelData[6];
+	size_t Stride;
+	size_t Resolution;
+};
+
 struct MaterialInfo
 {
 	TextureInfo DiffuseTexture;
@@ -82,9 +90,7 @@ struct DirectionalLight
 
 struct SkyLight
 {
-	const void* FacePixelData[6];
-	size_t Stride;
-	size_t Resolution;
+	CubeTextureInfo Skybox;
 };
 
 struct OutputBuffer
@@ -135,6 +141,10 @@ private:
 	ID3D12RootSignature* _DirectionalLightRootSignature = nullptr;
 	ID3D12PipelineState* _DirectionalLightPipelineState = nullptr;
 
+	// Sky light baking
+	ID3D12RootSignature* _SkyLightRootSignature = nullptr;
+	ID3D12PipelineState* _SkyLightPipelineState = nullptr;
+
 	MeshFormat _MeshFormat;
 	LoadedMesh* _Meshes;
 	size_t _MeshCount;
@@ -155,6 +165,7 @@ private:
 	void BakeLight(struct ID3D12PipelineState* pipelineState, struct ID3D12RootSignature* rootSignature, enum class BakeResource constantBuffer, const OutputBuffer* outputBuffer);
 	ID3D12Resource* CreateBuffer(size_t size, const char* data);
 	ID3D12Resource* CreateTexture(size_t width, size_t height, size_t stride, enum DXGI_FORMAT format, const char* data);
+	ID3D12Resource* CreateTextureCube(size_t resolution, size_t stride, enum DXGI_FORMAT format, const char** faceData);
 	ID3D12Resource* CreateResource(const struct D3D12_RESOURCE_DESC* description, size_t stride, size_t dataSize, const char* data);
 	ID3D12Resource* CreateUAV(size_t size, enum D3D12_RESOURCE_STATES initialState);
 	ID3D12Resource* CreateConstantBuffer(size_t size);

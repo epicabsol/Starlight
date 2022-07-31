@@ -89,7 +89,7 @@ float BarycentricInterpolate(float value0, float value1, float value2, float2 we
 /**
  * Calculates the radiance (total light arriving along a direction) from the given ray.
  */
-float3 Radiance(float3 rayStart, float3 rayDirection, float3 ref)
+bool Radiance(float3 rayStart, float3 rayDirection, out float3 radiance)
 {
     RayQuery<RAY_FLAG_NONE> q;
     RayDesc ray;
@@ -108,13 +108,13 @@ float3 Radiance(float3 rayStart, float3 rayDirection, float3 ref)
         float2 barycentrics = q.CommittedTriangleBarycentrics();
         float3x4 objectToWorld = q.CommittedObjectToWorld3x4();
         
-        uint index0 = MeshIndexBuffers[mesh][tri * 3];
-        uint index1 = MeshIndexBuffers[mesh][tri * 3 + 1];
-        uint index2 = MeshIndexBuffers[mesh][tri * 3 + 2];
+        uint index0 = MeshIndexBuffers[NonUniformResourceIndex(mesh)][tri * 3];
+        uint index1 = MeshIndexBuffers[NonUniformResourceIndex(mesh)][tri * 3 + 1];
+        uint index2 = MeshIndexBuffers[NonUniformResourceIndex(mesh)][tri * 3 + 2];
         
-        MeshVertex vertex0 = MeshVertexBuffers[mesh][index0];
-        MeshVertex vertex1 = MeshVertexBuffers[mesh][index1];
-        MeshVertex vertex2 = MeshVertexBuffers[mesh][index2];
+        MeshVertex vertex0 = MeshVertexBuffers[NonUniformResourceIndex(mesh)][index0];
+        MeshVertex vertex1 = MeshVertexBuffers[NonUniformResourceIndex(mesh)][index1];
+        MeshVertex vertex2 = MeshVertexBuffers[NonUniformResourceIndex(mesh)][index2];
         
         float3 normal = BarycentricInterpolate3(vertex0.Normal, vertex1.Normal, vertex2.Normal, barycentrics);
         float3 worldNormal = normalize(mul(objectToWorld, float4(normal, 0.0f)));
@@ -127,18 +127,20 @@ float3 Radiance(float3 rayStart, float3 rayDirection, float3 ref)
         float metallic = 0.0f;
         float3 albedo = float3(1.0f, 1.0f, 1.0f);
         
-        return PBRDiffuse(albedo, metallic, roughness, irradiance, normal, normalize(-rayDirection));
+        radiance = PBRDiffuse(albedo, metallic, roughness, irradiance, normal, normalize(-rayDirection));
+        return true;
     }
     else
     {
-        return float3(0.0f, 0.0f, 0.0f);
+        radiance = float3(0.0f, 0.0f, 0.0f);
+        return false;
     }
 }
 
 /**
  * Calculates the irradiance (total light arriving at a point) from indirect lighting (i.e. the lightmap).
  */
-float3 IndirectIrradiance(float3 position, float3 normal, float3 tangent, float3 bitangent, float3 ref)
+float3 IndirectIrradiance(float3 position, float3 normal, float3 tangent, float3 bitangent)
 {
     float3 irradiance = float3(0.0f, 0.0f, 0.0f);
 
@@ -148,7 +150,8 @@ float3 IndirectIrradiance(float3 position, float3 normal, float3 tangent, float3
         float3 localDirection = hemisphereProjectionUniform(hammersley.x, hammersley.y);
         float3 worldDirection = localDirection.x * tangent + localDirection.y * bitangent + localDirection.z * normal;
         
-        float3 radiance = Radiance(position + normal * 0.001f, worldDirection * 1000.0f, ref);
+        float3 radiance;
+        Radiance(position + normal * 0.001f, worldDirection * 1000.0f, radiance);
         irradiance += radiance * saturate(dot(normal, worldDirection));
     }
     irradiance *= 1.0f / INDIRECT_SAMPLE_COUNT;

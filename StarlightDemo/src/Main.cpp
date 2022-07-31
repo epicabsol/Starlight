@@ -18,8 +18,13 @@
 using namespace DirectX;
 
 #define BYTES_PER_PIXEL (4)
+#define SKYBOX_FACE_COUNT (6)
 #define LIGHT_MASK_RESOLUTION (1024)
 #define INPUT_MESH_FILENAME "test_mesh.obj"
+
+//#define BAKE_POINT_LIGHT
+//#define BAKE_DIRECTIONAL_LIGHT
+#define BAKE_SKY_LIGHT
 
 struct DemoVertex {
 	XMFLOAT3 Position;
@@ -61,6 +66,15 @@ void EnableD3D12DebugLayer()
 	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
 	{
 		debugController->EnableDebugLayer();
+
+		// Enable GPU-based validation
+		ID3D12Debug1* debugController1 = nullptr;
+		if (SUCCEEDED(debugController->QueryInterface(&debugController1)))
+		{
+			debugController1->SetEnableGPUBasedValidation(true);
+			debugController1->Release();
+		}
+
 		debugController->Release();
 	}
 
@@ -298,26 +312,66 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 	//
 	// DO BAKE
 	//
+	constexpr size_t outputStride = Align(BYTES_PER_PIXEL * LIGHT_MASK_RESOLUTION, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
 
+#ifdef BAKE_POINT_LIGHT
 	PointLight pointLight = { { 0, 1.1, 1 }, 0.1f, 1.0f, 0.09f, 0.032f };
-	constexpr size_t stride = Align(BYTES_PER_PIXEL * LIGHT_MASK_RESOLUTION, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
-	uint8_t* pointLightMaskBytes = new uint8_t[stride * LIGHT_MASK_RESOLUTION];
-	OutputBuffer pointLightMask = { &pointLightMaskBytes[0], stride, LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION };
+	uint8_t* pointLightMaskBytes = new uint8_t[outputStride * LIGHT_MASK_RESOLUTION];
+	OutputBuffer pointLightMask = { &pointLightMaskBytes[0], outputStride, LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION };
 	_Starlight->BakePointLight(&pointLight, &pointLightMask);
 
 	// Save point light's mask's pixel data, which is in `pointLightMaskBytes` - or do whatever else you want with it
-	stbi_write_png("output.png", LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION, 4, pointLightMaskBytes, (int)stride);
+	stbi_write_png("output.png", LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION, 4, pointLightMaskBytes, (int)outputStride);
 
 	delete[] pointLightMaskBytes;
+#endif
 
+#ifdef BAKE_DIRECTIONAL_LIGHT
 	DirectionalLight directionalLight = { { 1.0f, -3.0f, -2.0f } };
-	uint8_t* directionalLightMaskBytes = new uint8_t[stride * LIGHT_MASK_RESOLUTION];
-	OutputBuffer directionalLightMask = { &directionalLightMaskBytes[0], stride, LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION };
+	uint8_t* directionalLightMaskBytes = new uint8_t[outputStride * LIGHT_MASK_RESOLUTION];
+	OutputBuffer directionalLightMask = { &directionalLightMaskBytes[0], outputStride, LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION };
 	_Starlight->BakeDirectionalLight(&directionalLight, &directionalLightMask);
 
-	stbi_write_png("output_directional.png", LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION, 4, directionalLightMaskBytes, (int)stride);
+	stbi_write_png("output_directional.png", LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION, 4, directionalLightMaskBytes, (int)outputStride);
 
 	delete[] directionalLightMaskBytes;
+#endif
+
+#ifdef BAKE_SKY_LIGHT
+	// Load skybox
+	const char* skyboxFaceFilenames[] = {
+		"assets/skybox/px.hdr",
+		"assets/skybox/nx.hdr",
+		"assets/skybox/py.hdr",
+		"assets/skybox/ny.hdr",
+		"assets/skybox/pz.hdr",
+		"assets/skybox/nz.hdr",
+	};
+	SkyLight skybox = {
+		{
+			{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr },
+			0, 0,
+		}
+	};
+	for (size_t i = 0; i < SKYBOX_FACE_COUNT; i++)
+	{
+		int width = 0;
+		int height = 0;
+		int components = 0;
+		skybox.Skybox.FacePixelData[i] = stbi_loadf(skyboxFaceFilenames[i], &width, &height, &components, 4);
+		skybox.Skybox.Resolution = height;
+		skybox.Skybox.Stride = width * sizeof(float) * 4;
+	}
+	uint8_t* skyLightMaskBytes = new uint8_t[outputStride * LIGHT_MASK_RESOLUTION];
+	OutputBuffer skyLightMask = { &skyLightMaskBytes[0], outputStride, LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION };
+	_Starlight->BakeSkyLight(&skybox, &skyLightMask);
+	stbi_write_png("output_sky.png", LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION, 4, skyLightMaskBytes, (int)outputStride);
+	for (size_t i = 0; i < SKYBOX_FACE_COUNT; i++)
+	{
+		stbi_image_free((void*)skybox.Skybox.FacePixelData[i]);
+		skybox.Skybox.FacePixelData[i] = nullptr;
+	}
+#endif
 
 	//
 	// CLEANUP

@@ -9,6 +9,7 @@
 #include "UVVertexShader.h"
 #include "PointLightPixelShader.h"
 #include "DirectionalLightPixelShader.h"
+#include "SkyLightPixelShader.h"
 
 #include "LoadedMesh.hpp"
 
@@ -18,11 +19,12 @@ enum class BakeResource
 {
 	PointLightConstantBuffer,
 	DirectionalLightConstantBuffer,
+	SkyLightTextureCube,
 	LightmaskBuffers,
 	LastLightMaskBuffer = LightmaskBuffers + STARLIGHT_BUFFER_COUNT - 1,
-	BAKE_RESOURCE_RANGE(VertexBuffer),
-	BAKE_RESOURCE_RANGE(IndexBuffer),
-	BAKE_RESOURCE_RANGE(ConstantBuffer),
+	BAKE_RESOURCE_RANGE(MeshVertexBuffer),
+	BAKE_RESOURCE_RANGE(MeshIndexBuffer),
+	BAKE_RESOURCE_RANGE(MeshConstantBuffer),
 	Count,
 };
 
@@ -175,6 +177,14 @@ Starlight::Starlight(ID3D12Device* device, const MeshFormat& meshFormat) : _Mesh
 	psoDesc.PS = CD3DX12_SHADER_BYTECODE(Shaders::DirectionalLightPixelShaderBytes, Shaders::DirectionalLightPixelShaderLength);
 	this->_Device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&this->_DirectionalLightPipelineState));
 
+	// Use a slightly modified root signature for sky lights
+	D3D12_DESCRIPTOR_RANGE skyboxDescriptor = CD3DX12_DESCRIPTOR_RANGE(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2, 0);
+	rootParameters[1].InitAsDescriptorTable(1, &skyboxDescriptor);
+	this->_SkyLightRootSignature = this->CreateRootSignature(&rootSignatureDesc);
+	psoDesc.pRootSignature = this->_SkyLightRootSignature;
+	psoDesc.PS = CD3DX12_SHADER_BYTECODE(Shaders::SkyLightPixelShaderBytes, Shaders::SkyLightPixelShaderLength);
+	this->_Device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&this->_SkyLightPipelineState));
+
 	this->_MeshCount = 0;
 	this->_Meshes = new LoadedMesh[STARLIGHT_MAX_MESHES];
 }
@@ -193,7 +203,7 @@ void Starlight::PrepareOutputBuffer(const OutputBuffer* outputBuffer)
 	{
 		D3D12_RESOURCE_DESC lightmaskDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R8G8B8A8_UNORM, (unsigned int)outputBuffer->Width, (unsigned int)outputBuffer->Height, 1, 1, 1, 0, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
 		D3D12_HEAP_PROPERTIES lightmaskHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-		this->_Device->CreateCommittedResource(&lightmaskHeap, D3D12_HEAP_FLAG_NONE, &lightmaskDesc, i == 0 ? D3D12_RESOURCE_STATE_RENDER_TARGET : D3D12_RESOURCE_STATE_COMMON, &clearValue, IID_PPV_ARGS(&this->_LightmaskBuffers[i]));
+		this->_Device->CreateCommittedResource(&lightmaskHeap, D3D12_HEAP_FLAG_NONE, &lightmaskDesc, i == 0 ? D3D12_RESOURCE_STATE_RENDER_TARGET : D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, &clearValue, IID_PPV_ARGS(&this->_LightmaskBuffers[i]));
 		
 		wchar_t bufferName[255] = { '\0' };
 		wsprintfW(bufferName, L"LightMaskBuffer[%u]", (int)i);
@@ -222,7 +232,7 @@ void Starlight::PrepareOutputBuffer(const OutputBuffer* outputBuffer)
 void Starlight::CleanupOutputBuffer(const OutputBuffer* outputBuffer)
 {
 	// Download the pixel data from the latest lightmask buffer
-	this->TransitionResource(this->_LightmaskBuffers[this->_LatestLightmaskBuffer], D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE);
+	this->TransitionResource(this->_LightmaskBuffers[this->_LatestLightmaskBuffer], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
 
 	D3D12_TEXTURE_COPY_LOCATION source = CD3DX12_TEXTURE_COPY_LOCATION(this->_LightmaskBuffers[this->_LatestLightmaskBuffer], 0);
 	D3D12_PLACED_SUBRESOURCE_FOOTPRINT destinationFootprint = { 0, { DXGI_FORMAT_R8G8B8A8_UNORM, (unsigned int)outputBuffer->Width, (unsigned int)outputBuffer->Height, 1, (unsigned int)outputBuffer->Stride } };
@@ -339,8 +349,8 @@ void Starlight::BakeLight(ID3D12PipelineState* pipelineState, ID3D12RootSignatur
 		}
 
 		D3D12_RESOURCE_BARRIER barriers[] = {
-			CD3DX12_RESOURCE_BARRIER::Transition(this->_LightmaskBuffers[(this->_LatestLightmaskBuffer + 1) % STARLIGHT_BUFFER_COUNT], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COMMON),
-			CD3DX12_RESOURCE_BARRIER::Transition(this->_LightmaskBuffers[(this->_LatestLightmaskBuffer + 2) % STARLIGHT_BUFFER_COUNT], D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_RENDER_TARGET),
+			CD3DX12_RESOURCE_BARRIER::Transition(this->_LightmaskBuffers[(this->_LatestLightmaskBuffer + 1) % STARLIGHT_BUFFER_COUNT], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
+			CD3DX12_RESOURCE_BARRIER::Transition(this->_LightmaskBuffers[(this->_LatestLightmaskBuffer + 2) % STARLIGHT_BUFFER_COUNT], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET),
 		};
 		this->_CommandList->ResourceBarrier(sizeof(barriers) / sizeof(barriers[0]), barriers);
 
@@ -353,13 +363,81 @@ void Starlight::BakeLight(ID3D12PipelineState* pipelineState, ID3D12RootSignatur
 ID3D12Resource* Starlight::CreateBuffer(size_t size, const char* data)
 {
 	D3D12_RESOURCE_DESC bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(size);
-	return this->CreateResource(&bufferDesc, 1, size, data);
+	ID3D12Resource* resource = this->CreateResource(&bufferDesc, 1, size, data);
+
+	this->TransitionResource(resource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ);
+
+	return resource;
 }
 
 ID3D12Resource* Starlight::CreateTexture(size_t width, size_t height, size_t stride, DXGI_FORMAT format, const char* data)
 {
 	D3D12_RESOURCE_DESC textureDesc = CD3DX12_RESOURCE_DESC::Tex2D(format, width, height, 1, 1, 1, 0);
 	return this->CreateResource(&textureDesc, stride, stride * height, data);
+}
+
+void CopyTextureRows(void* destination, size_t destinationStride, const void* source, size_t sourceStride, size_t rows)
+{
+	if (sourceStride == destinationStride)
+	{
+		memcpy(destination, source, sourceStride * rows);
+	}
+	else
+	{
+		size_t copyStride = sourceStride < destinationStride ? sourceStride : destinationStride;
+		for (size_t row = 0; row < rows; row++)
+		{
+			memcpy((char*)destination + row * destinationStride, (const char*)source + row * sourceStride, copyStride);
+		}
+	}
+}
+
+ID3D12Resource* Starlight::CreateTextureCube(size_t resolution, size_t stride, enum DXGI_FORMAT format, const char** faceData)
+{
+	D3D12_RESOURCE_DESC cubeDesc = CD3DX12_RESOURCE_DESC::Tex2D(format, resolution, resolution, 6, 1, 1, 0, D3D12_RESOURCE_FLAG_NONE);
+
+	// Create a new upload buffer with the size of one cubemap face
+	size_t uploadStride = Align(stride, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+	size_t uploadSize = uploadStride * resolution;
+
+	D3D12_HEAP_PROPERTIES uploadHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+	D3D12_RESOURCE_DESC uploadDesc = CD3DX12_RESOURCE_DESC::Buffer(uploadSize);
+	ID3D12Resource* uploadBuffer = nullptr;
+	this->_Device->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &uploadDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&uploadBuffer));
+
+	// Create the actual resource
+	D3D12_HEAP_PROPERTIES defaultHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+	ID3D12Resource* textureCube = nullptr;
+	this->_Device->CreateCommittedResource(&defaultHeap, D3D12_HEAP_FLAG_NONE, &cubeDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&textureCube));
+
+	// Copy data to the upload buffer
+	D3D12_RANGE emptyRange = CD3DX12_RANGE(0, 0);
+	void* uploadBytes = nullptr;
+	uploadBuffer->Map(0, &emptyRange, &uploadBytes);
+	
+	for (size_t face = 0; face < 6; face++)
+	{
+		// Copy to the upload buffer
+		CopyTextureRows(uploadBytes, uploadStride, faceData[face], stride, resolution);
+
+		// Copy to the texture cube face
+		D3D12_TEXTURE_COPY_LOCATION destination = CD3DX12_TEXTURE_COPY_LOCATION(textureCube, face);
+		D3D12_PLACED_SUBRESOURCE_FOOTPRINT sourceFootprint = { 0, { cubeDesc.Format, cubeDesc.Width, cubeDesc.Height, 1, uploadStride } };
+		D3D12_TEXTURE_COPY_LOCATION source = CD3DX12_TEXTURE_COPY_LOCATION(uploadBuffer, sourceFootprint);
+		this->_CommandList->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
+
+		// We have to wait for the copy to complete before we overwrite the upload buffer with the data for the next face
+		this->ExecuteAndReset();
+	}
+
+	uploadBuffer->Unmap(0, nullptr);
+	uploadBuffer->Release();
+	uploadBuffer = nullptr;
+
+	this->TransitionResource(textureCube, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ);
+	//this->ExecuteAndReset(); // We can probably let this run with whatever the next graphics work is
+
+	return textureCube;
 }
 
 ID3D12Resource* Starlight::CreateResource(const D3D12_RESOURCE_DESC* description, size_t stride, size_t dataSize, const char* data)
@@ -393,10 +471,7 @@ ID3D12Resource* Starlight::CreateResource(const D3D12_RESOURCE_DESC* description
 	}
 	else
 	{
-		for (size_t row = 0; row < dataSize / stride; row++)
-		{
-			memcpy_s(uploadBytes + row * uploadStride, uploadStride, data + row * stride, stride);
-		}
+		CopyTextureRows(uploadBytes, uploadStride, data, stride, dataSize / stride);
 	}
 	uploadBuffer->Unmap(0, nullptr);
 
@@ -469,12 +544,12 @@ D3D12_GPU_DESCRIPTOR_HANDLE Starlight::GetBakeResourceGPU(BakeResource resource)
 
 D3D12_CPU_DESCRIPTOR_HANDLE Starlight::GetMeshResourceCPU(size_t mesh, MeshResource resource) const
 {
-	return CD3DX12_CPU_DESCRIPTOR_HANDLE(this->_ResourceDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), (unsigned int)BakeResource::VertexBuffers + (unsigned int)resource * STARLIGHT_MAX_MESHES + (unsigned int)mesh, this->_SRVDescriptorSize);
+	return CD3DX12_CPU_DESCRIPTOR_HANDLE(this->_ResourceDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), (unsigned int)BakeResource::MeshVertexBuffers + (unsigned int)resource * STARLIGHT_MAX_MESHES + (unsigned int)mesh, this->_SRVDescriptorSize);
 }
 
 D3D12_GPU_DESCRIPTOR_HANDLE Starlight::GetMeshResourceGPU(size_t mesh, MeshResource resource) const
 {
-	return CD3DX12_GPU_DESCRIPTOR_HANDLE(this->_ResourceDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), (unsigned int)BakeResource::VertexBuffers + (unsigned int)resource * STARLIGHT_MAX_MESHES + (unsigned int)mesh, this->_SRVDescriptorSize);
+	return CD3DX12_GPU_DESCRIPTOR_HANDLE(this->_ResourceDescriptorHeap->GetGPUDescriptorHandleForHeapStart(), (unsigned int)BakeResource::MeshVertexBuffers + (unsigned int)resource * STARLIGHT_MAX_MESHES + (unsigned int)mesh, this->_SRVDescriptorSize);
 }
 
 Starlight::~Starlight()
@@ -495,6 +570,12 @@ Starlight::~Starlight()
 		this->_Meshes[i].AccelerationStructure = nullptr;
 	}
 	delete[] this->_Meshes;
+
+	this->_SkyLightPipelineState->Release();
+	this->_SkyLightPipelineState = nullptr;
+
+	this->_SkyLightRootSignature->Release();
+	this->_SkyLightRootSignature = nullptr;
 
 	this->_DirectionalLightPipelineState->Release();
 	this->_DirectionalLightPipelineState = nullptr;
@@ -699,7 +780,22 @@ void Starlight::BakeDirectionalLight(const DirectionalLight* directionalLight, c
 void Starlight::BakeSkyLight(const SkyLight* skyLight, const OutputBuffer* outputBuffer)
 {
 	this->RebuildTopLevelIfNeeded();
-	// TODO: Implement!
+
+	this->PrepareOutputBuffer(outputBuffer);
+
+	this->_LatestLightmaskBuffer = STARLIGHT_BUFFER_COUNT - 1;
+
+	ID3D12Resource* skyboxTexture = this->CreateTextureCube(skyLight->Skybox.Resolution, skyLight->Skybox.Stride, DXGI_FORMAT_R32G32B32A32_FLOAT, (const char**)skyLight->Skybox.FacePixelData);
+	D3D12_SHADER_RESOURCE_VIEW_DESC skyboxDesc = { DXGI_FORMAT_R32G32B32A32_FLOAT, D3D12_SRV_DIMENSION_TEXTURECUBE, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
+	skyboxDesc.TextureCube = { 0, 1, 0.0f };
+	this->_Device->CreateShaderResourceView(skyboxTexture, &skyboxDesc, this->GetBakeResourceCPU(BakeResource::SkyLightTextureCube));
+
+	this->BakeLight(this->_SkyLightPipelineState, this->_SkyLightRootSignature, BakeResource::SkyLightTextureCube, outputBuffer);
+
+	this->CleanupOutputBuffer(outputBuffer);
+
+	skyboxTexture->Release();
+	skyboxTexture = nullptr;
 }
 
 Starlight* Starlight::CreateStarlight(ID3D12Device* device, const MeshFormat& meshFormat)
