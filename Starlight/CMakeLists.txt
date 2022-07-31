@@ -34,6 +34,9 @@ dxc("PointLightPixelShader" "PSMain" "ps_6_5")
 dxc("DirectionalLightPixelShader" "PSMain" "ps_6_5")
 dxc("SkyLightPixelShader" "PSMain" "ps_6_5")
 
+dxc("FullscreenVertexShader" "VSMain" "vs_6_0")
+dxc("BleedPixelShader" "PSMain" "ps_6_0")
+
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 string(STRIP "${all_shaders}" all_shaders)
 

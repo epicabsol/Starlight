@@ -19,11 +19,11 @@ using namespace DirectX;
 
 #define BYTES_PER_PIXEL (4)
 #define SKYBOX_FACE_COUNT (6)
-#define LIGHT_MASK_RESOLUTION (1024)
+#define LIGHT_MASK_RESOLUTION (2048)
 #define INPUT_MESH_FILENAME "test_mesh.obj"
 
-//#define BAKE_POINT_LIGHT
-//#define BAKE_DIRECTIONAL_LIGHT
+#define BAKE_POINT_LIGHT
+#define BAKE_DIRECTIONAL_LIGHT
 #define BAKE_SKY_LIGHT
 
 struct DemoVertex {

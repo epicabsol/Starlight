@@ -58,7 +58,7 @@ struct TextureInfo
 	size_t Height;
 };
 
-// Describes a single-mip R32G32B32A32 floating-point input texture array with six faces.
+// Describes a single-mip R32G32B32A32 floating-point input texture array with six textures.
 struct CubeTextureInfo
 {
 	const void* FacePixelData[6];
@@ -99,6 +99,12 @@ struct OutputBuffer
 	size_t Stride; // The number of bytes from the beginning of one row of pixel data to the beginning of the next row of pixel data.
 	size_t Width;
 	size_t Height;
+};
+
+struct BakeOptions
+{
+	size_t Bounces; // How many times to bounce indirect light. Zero means direct light only.
+	size_t EdgeBleedPixels; // How many pixels to bleed the computed masks.
 };
 
 class Starlight
@@ -145,11 +151,19 @@ private:
 	ID3D12RootSignature* _SkyLightRootSignature = nullptr;
 	ID3D12PipelineState* _SkyLightPipelineState = nullptr;
 
+	// Edge bleed
+	ID3D12RootSignature* _BleedRootSignature = nullptr;
+	ID3D12PipelineState* _BleedPipelineState = nullptr;
+
 	MeshFormat _MeshFormat;
 	LoadedMesh* _Meshes;
 	size_t _MeshCount;
+	BakeOptions _BakeOptions;
 
 	Starlight(ID3D12Device* device, const MeshFormat& meshFormat);
+
+	inline void SetBakeOptions(const BakeOptions& bakeOptions) { this->_BakeOptions = bakeOptions; }
+	inline const BakeOptions& GetBakeOptions() const { return this->_BakeOptions; }
 
 	/**
 	 * Prepares Starlight to bake into the given output buffer.

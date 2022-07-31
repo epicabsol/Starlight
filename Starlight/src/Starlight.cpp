@@ -10,6 +10,8 @@
 #include "PointLightPixelShader.h"
 #include "DirectionalLightPixelShader.h"
 #include "SkyLightPixelShader.h"
+#include "FullscreenVertexShader.h"
+#include "BleedPixelShader.h"
 
 #include "LoadedMesh.hpp"
 
@@ -185,8 +187,23 @@ Starlight::Starlight(ID3D12Device* device, const MeshFormat& meshFormat) : _Mesh
 	psoDesc.PS = CD3DX12_SHADER_BYTECODE(Shaders::SkyLightPixelShaderBytes, Shaders::SkyLightPixelShaderLength);
 	this->_Device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&this->_SkyLightPipelineState));
 
+	// Pipeline state for edge bleed
+	D3D12_DESCRIPTOR_RANGE prevMaskRange = CD3DX12_DESCRIPTOR_RANGE(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+	rootParameters[0].InitAsDescriptorTable(1, &prevMaskRange);
+	rootParameters[1].InitAsDescriptorTable(1, &samplerRange);
+	D3D12_ROOT_SIGNATURE_DESC bleedSignatureDesc = CD3DX12_ROOT_SIGNATURE_DESC(2, rootParameters);
+	this->_BleedRootSignature = this->CreateRootSignature(&bleedSignatureDesc);
+
+	psoDesc.InputLayout = { nullptr, 0 };
+	psoDesc.pRootSignature = this->_BleedRootSignature;
+	psoDesc.VS = CD3DX12_SHADER_BYTECODE(Shaders::FullscreenVertexShaderBytes, Shaders::FullscreenVertexShaderLength);
+	psoDesc.PS = CD3DX12_SHADER_BYTECODE(Shaders::BleedPixelShaderBytes, Shaders::BleedPixelShaderLength);
+	this->_Device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&this->_BleedPipelineState));
+
 	this->_MeshCount = 0;
 	this->_Meshes = new LoadedMesh[STARLIGHT_MAX_MESHES];
+
+	this->_BakeOptions = { 5, 5 };
 }
 
 void Starlight::PrepareOutputBuffer(const OutputBuffer* outputBuffer)
@@ -330,8 +347,7 @@ void Starlight::BakeLight(ID3D12PipelineState* pipelineState, ID3D12RootSignatur
 
 	this->_CommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	const size_t bounces = 5;
-	for (size_t bounce = 0; bounce < bounces; bounce++)
+	for (size_t bounce = 0; bounce < this->GetBakeOptions().Bounces; bounce++)
 	{
 		D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(this->_RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), (this->_LatestLightmaskBuffer + 1) % STARLIGHT_BUFFER_COUNT, this->_RTVDescriptorSize);
 		this->_CommandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
@@ -347,6 +363,29 @@ void Starlight::BakeLight(ID3D12PipelineState* pipelineState, ID3D12RootSignatur
 			this->_CommandList->IASetIndexBuffer(&indexBuffer);
 			this->_CommandList->DrawIndexedInstanced(this->_Meshes[i].IndexCount, 1, 0, 0, 0);
 		}
+
+		D3D12_RESOURCE_BARRIER barriers[] = {
+			CD3DX12_RESOURCE_BARRIER::Transition(this->_LightmaskBuffers[(this->_LatestLightmaskBuffer + 1) % STARLIGHT_BUFFER_COUNT], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
+			CD3DX12_RESOURCE_BARRIER::Transition(this->_LightmaskBuffers[(this->_LatestLightmaskBuffer + 2) % STARLIGHT_BUFFER_COUNT], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET),
+		};
+		this->_CommandList->ResourceBarrier(sizeof(barriers) / sizeof(barriers[0]), barriers);
+
+		this->_LatestLightmaskBuffer = (this->_LatestLightmaskBuffer + 1) % STARLIGHT_BUFFER_COUNT;
+	}
+
+	// Bleed edges
+	this->_CommandList->SetPipelineState(this->_BleedPipelineState);
+	this->_CommandList->SetGraphicsRootSignature(this->_BleedRootSignature);
+	this->_CommandList->SetGraphicsRootDescriptorTable(1, this->_SamplerDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+
+	for (size_t i = 0; i < this->GetBakeOptions().EdgeBleedPixels; i++)
+	{
+		D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = CD3DX12_CPU_DESCRIPTOR_HANDLE(this->_RTVDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), (this->_LatestLightmaskBuffer + 1) % STARLIGHT_BUFFER_COUNT, this->_RTVDescriptorSize);
+		this->_CommandList->OMSetRenderTargets(1, &rtvHandle, false, nullptr);
+
+		this->_CommandList->SetGraphicsRootDescriptorTable(0, this->GetBakeResourceGPU((BakeResource)((size_t)BakeResource::LightmaskBuffers + this->_LatestLightmaskBuffer)));
+
+		this->_CommandList->DrawInstanced(3, 1, 0, 0);
 
 		D3D12_RESOURCE_BARRIER barriers[] = {
 			CD3DX12_RESOURCE_BARRIER::Transition(this->_LightmaskBuffers[(this->_LatestLightmaskBuffer + 1) % STARLIGHT_BUFFER_COUNT], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE),
@@ -570,6 +609,12 @@ Starlight::~Starlight()
 		this->_Meshes[i].AccelerationStructure = nullptr;
 	}
 	delete[] this->_Meshes;
+
+	this->_BleedPipelineState->Release();
+	this->_BleedPipelineState = nullptr;
+
+	this->_BleedRootSignature->Release();
+	this->_BleedRootSignature = nullptr;
 
 	this->_SkyLightPipelineState->Release();
 	this->_SkyLightPipelineState = nullptr;

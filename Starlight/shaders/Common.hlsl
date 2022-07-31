@@ -10,6 +10,12 @@ struct MeshVertex
     float2 LightmapCoord : TEXCOORD1;
 };
 
+struct ScreenPixel
+{
+    float4 ScreenPosition : SV_POSITION;
+    float2 LightmapCoord : TEXCOORD0;
+};
+
 struct LightmapPixel
 {
     float4 ScreenPosition : SV_POSITION;
