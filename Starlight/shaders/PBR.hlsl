@@ -140,14 +140,14 @@ bool Radiance(float3 rayStart, float3 rayDirection, out float3 radiance)
 /**
  * Calculates the irradiance (total light arriving at a point) from indirect lighting (i.e. the lightmap).
  */
-float3 IndirectIrradiance(float3 position, float3 normal, float3 tangent, float3 bitangent)
+float3 IndirectIrradiance(float3 position, float3 normal, float3 tangent, float3 bitangent, float2 coord)
 {
     float3 irradiance = float3(0.0f, 0.0f, 0.0f);
 
     for (uint i = 0; i < INDIRECT_SAMPLE_COUNT; i++)
     {
-        float2 hammersley = hammersley2d(i, INDIRECT_SAMPLE_COUNT);
-        float3 localDirection = hemisphereProjectionUniform(hammersley.x, hammersley.y);
+        float2 hammersley = Hammersley2dRandomized(i, INDIRECT_SAMPLE_COUNT, coord);
+        float3 localDirection = HemisphereProjectionUniform(hammersley.x, hammersley.y);
         float3 worldDirection = localDirection.x * tangent + localDirection.y * bitangent + localDirection.z * normal;
         
         float3 radiance;

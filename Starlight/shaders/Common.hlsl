@@ -27,8 +27,14 @@ struct LightmapPixel
     float2 LightmapCoord : TEXCOORD1;
 };
 
+// https://stackoverflow.com/a/4275343
+float Rand(float2 coord)
+{
+    return frac(sin(dot(coord, float2(12.9898f, 78.233f))) * 43758.5453f);
+}
+
 // Hammersley sequence (implementation from http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html#eq-hammersley)
-float radicalInverse_VdC(uint bits)
+float RadicalInverse_VdC(uint bits)
 {
     bits = (bits << 16u) | (bits >> 16u);
     bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
@@ -38,13 +44,26 @@ float radicalInverse_VdC(uint bits)
     return float(bits) * 2.3283064365386963e-10; // / 0x100000000
 }
 
-float2 hammersley2d(uint i, uint N)
+/**
+ * Generates a 2D vector on the interval [0, 1) from element i of the Hammersley sequence with count N.
+ *
+ * @param i The index of the element from the Hammersley sequence to generate.
+ * @param N The size of the Hammersley set to generate an element from.
+ */
+float2 Hammersley2d(uint i, uint N)
 {
-    return float2(float(i) / float(N), radicalInverse_VdC(i));
+    return float2(float(i) / float(N), RadicalInverse_VdC(i));
+}
+
+float2 Hammersley2dRandomized(uint i, uint N, float2 xy)
+{
+    float offset = Rand(xy);
+    float2 original = Hammersley2d(i, N);
+    return frac(original + offset);
 }
 
 // Project uniformly-distributed points onto a uniformly- or cosine-distributed hemisphere (implementation also from http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html#eq-hammersley)
-float3 hemisphereProjectionUniform(float u, float v)
+float3 HemisphereProjectionUniform(float u, float v)
 {
     float phi = v * 2.0 * PI;
     float cosTheta = 1.0 - u;
@@ -52,7 +71,7 @@ float3 hemisphereProjectionUniform(float u, float v)
     return float3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
 }
 
-float3 hemisphereProjectionCosine(float u, float v)
+float3 HemisphereProjectionCosine(float u, float v)
 {
     float phi = v * 2.0 * PI;
     float cosTheta = sqrt(1.0 - u);
@@ -65,6 +84,6 @@ float3 JitterPosition(float3 position, float3 tangent, float3 bitangent, uint sa
     // Approximate the world-space width and height of one lightmap texel
     float texelSize = lerp(length(ddx_fine(position)), length(ddy_fine(position)), 0.5f);
     
-    float2 jitter = hammersley2d(sample, sampleCount) - float2(0.5f, 0.5f);
+    float2 jitter = Hammersley2d(sample, sampleCount) - float2(0.5f, 0.5f);
     return position + (jitter.x * tangent + jitter.y * bitangent) * texelSize;
 }

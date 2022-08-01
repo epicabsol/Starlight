@@ -4,15 +4,15 @@
 
 TextureCube<float4> Skybox : register(t2);
 
-float3 SkyLightIrradiance(float3 position, float3 normal, float3 tangent, float3 bitangent)
+float3 SkyLightIrradiance(float3 position, float3 normal, float3 tangent, float3 bitangent, float2 coord)
 {
     float softness = 0.1f;
     
     float3 irradiance = float3(0.0f, 0.0f, 0.0f);
     for (uint i = 0; i < SKY_SAMPLE_COUNT; i++)
     {
-        float2 hammersley = hammersley2d(i, SKY_SAMPLE_COUNT);
-        float3 localDirection = hemisphereProjectionCosine(hammersley.x, hammersley.y);
+        float2 hammersley = Hammersley2dRandomized(i, SKY_SAMPLE_COUNT, coord);
+        float3 localDirection = HemisphereProjectionCosine(hammersley.x, hammersley.y);
         float3 worldDirection = localDirection.x * tangent + localDirection.y * bitangent + localDirection.z * normal;
         
         float3 radiance;
@@ -28,7 +28,7 @@ float3 SkyLightIrradiance(float3 position, float3 normal, float3 tangent, float3
 
 float4 PSMain(LightmapPixel input) : SV_Target0
 {
-    float3 irradiance = SkyLightIrradiance(input.WorldPosition, input.WorldNormal, input.WorldTangent, input.WorldBitangent);
+    float3 irradiance = SkyLightIrradiance(input.WorldPosition, input.WorldNormal, input.WorldTangent, input.WorldBitangent, input.LightmapCoord);
     
     return float4(irradiance, 1.0f);
 }

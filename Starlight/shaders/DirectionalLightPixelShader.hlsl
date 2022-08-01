@@ -8,7 +8,7 @@ cbuffer PointLightConstantBuffer : register(b0)
     float _Padding;
 }
 
-float3 DirectionalLightIrradiance(float3 position, float3 normal, float3 tangent, float3 bitangent, float3 lightDirection)
+float3 DirectionalLightIrradiance(float3 position, float3 normal, float3 tangent, float3 bitangent, float3 lightDirection, float2 coord)
 {
     float3 lightForward = normalize(lightDirection);
     float3 lightSide = cross(lightForward, float3(0, 1, 0));
@@ -19,8 +19,8 @@ float3 DirectionalLightIrradiance(float3 position, float3 normal, float3 tangent
     float visibility = 0.0f;
     for (uint i = 0; i < DIRECTIONAL_SHADOW_SAMPLE_COUNT; i++)
     {
-        float2 hammersley = hammersley2d(i, DIRECTIONAL_SHADOW_SAMPLE_COUNT);
-        float3 localDirection = hemisphereProjectionCosine(hammersley.x, hammersley.y);
+        float2 hammersley = Hammersley2dRandomized(i, DIRECTIONAL_SHADOW_SAMPLE_COUNT, coord);
+        float3 localDirection = HemisphereProjectionCosine(hammersley.x, hammersley.y);
         
         float3 blurredDirection = localDirection.x * lightSide + localDirection.y * lightUp + localDirection.z * lightForward;
         blurredDirection = normalize(lerp(lightForward, blurredDirection, softness));
@@ -41,9 +41,9 @@ float3 DirectionalLightIrradiance(float3 position, float3 normal, float3 tangent
 
 float4 PSMain(LightmapPixel input) : SV_Target0
 {
-    float3 directIrradiance = DirectionalLightIrradiance(input.WorldPosition, input.WorldNormal, input.WorldTangent, input.WorldBitangent, WorldDirection);
+    float3 directIrradiance = DirectionalLightIrradiance(input.WorldPosition, input.WorldNormal, input.WorldTangent, input.WorldBitangent, WorldDirection, input.LightmapCoord);
     
-    float3 indirectIrradiance = IndirectIrradiance(input.WorldPosition, input.WorldNormal, input.WorldTangent, input.WorldBitangent);
+    float3 indirectIrradiance = IndirectIrradiance(input.WorldPosition, input.WorldNormal, input.WorldTangent, input.WorldBitangent, input.LightmapCoord);
     
     return float4(directIrradiance + indirectIrradiance, 1.0f);
 }
