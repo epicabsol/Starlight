@@ -4,13 +4,16 @@ set(all_shaders "")
 #
 # Function for compiling SM 6.0+ HLSL shaders with dxc, and then including them as C++ byte arrays.
 #
-function(dxc shader_name entrypoint profile)
+function(dxc shader_name entrypoint profile dependencies)
+	list(TRANSFORM dependencies PREPEND "shaders/")
+
 	# Compile .hlsl source into .bin bytecode
 	add_custom_command(
 		OUTPUT "shaders/${shader_name}.bin"
 		BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/shaders/${shader_name}.pdb"
 		MAIN_DEPENDENCY "shaders/${shader_name}.hlsl"
 		COMMENT "Building HLSL shader ${shader_name}"
+		DEPENDS "${dependencies}"
 
 		COMMAND "dxc" "-E ${entrypoint}" "-WX" "-T ${profile}" "-Fo ${CMAKE_CURRENT_BINARY_DIR}/shaders/${shader_name}.bin" $<$<CONFIG:Debug>:"-Zi"> $<$<CONFIG:Debug>:"-Qembed_debug"> $<$<CONFIG:DEBUG>:"-Fd ${CMAKE_CURRENT_BINARY_DIR}/shaders/${shader_name}.pdb"> "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${shader_name}.hlsl"
 	)
@@ -29,13 +32,13 @@ function(dxc shader_name entrypoint profile)
 endfunction()
 
 # Shaders
-dxc("UVVertexShader" "VSMain" "vs_6_0")
-dxc("PointLightPixelShader" "PSMain" "ps_6_5")
-dxc("DirectionalLightPixelShader" "PSMain" "ps_6_5")
-dxc("SkyLightPixelShader" "PSMain" "ps_6_5")
+dxc("UVVertexShader" "VSMain" "vs_6_0" "Common.hlsl")
+dxc("PointLightPixelShader" "PSMain" "ps_6_5" "Common.hlsl;PBR.hlsl")
+dxc("DirectionalLightPixelShader" "PSMain" "ps_6_5" "Common.hlsl;PBR.hlsl")
+dxc("SkyLightPixelShader" "PSMain" "ps_6_5" "Common.hlsl;PBR.hlsl")
 
-dxc("FullscreenVertexShader" "VSMain" "vs_6_0")
-dxc("BleedPixelShader" "PSMain" "ps_6_0")
+dxc("FullscreenVertexShader" "VSMain" "vs_6_0" "Common.hlsl")
+dxc("BleedPixelShader" "PSMain" "ps_6_0" "Common.hlsl")
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 string(STRIP "${all_shaders}" all_shaders)

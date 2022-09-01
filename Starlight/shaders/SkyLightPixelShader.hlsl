@@ -16,7 +16,7 @@ float3 SkyLightIrradiance(float3 position, float3 normal, float3 tangent, float3
         float3 worldDirection = localDirection.x * tangent + localDirection.y * bitangent + localDirection.z * normal;
         
         float3 radiance;
-        bool hitMesh = Radiance(position + normal * 0.001f, worldDirection * 1000.0f, radiance);
+        bool hitMesh = RadianceFull(position + normal * 0.001f, worldDirection * 1000.0f, radiance, coord);
         float3 skyRadiance = Skybox.Sample(LightmapSampler, worldDirection).xyz;
         
         irradiance += (hitMesh ? radiance : skyRadiance) /* * saturate(dot(normal, worldDirection))*/; // The dot product here is removed in favor of the cosine distribution above.

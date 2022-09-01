@@ -27,6 +27,17 @@ struct LightmapPixel
     float2 LightmapCoord : TEXCOORD1;
 };
 
+#define SRGB_GAMMA (2.2f)
+float3 ToLinearSpace(float3 value)
+{
+    return pow(value, SRGB_GAMMA);
+}
+
+float3 ToSRGBSpace(float3 value)
+{
+    return pow(value, 1.0f / SRGB_GAMMA);
+}
+
 // https://stackoverflow.com/a/4275343
 float Rand(float2 coord)
 {

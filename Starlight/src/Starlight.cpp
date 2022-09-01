@@ -27,6 +27,8 @@ enum class BakeResource
 	BAKE_RESOURCE_RANGE(MeshVertexBuffer),
 	BAKE_RESOURCE_RANGE(MeshIndexBuffer),
 	BAKE_RESOURCE_RANGE(MeshConstantBuffer),
+	BAKE_RESOURCE_RANGE(MeshDiffuseTexture),
+	BAKE_RESOURCE_RANGE(MeshNRMTexture),
 	Count,
 };
 
@@ -129,7 +131,7 @@ Starlight::Starlight(ID3D12Device* device, const MeshFormat& meshFormat) : _Mesh
 	this->_PointLightConstantBuffer->Map(0, &emptyRange, (void**)&this->_PointLightConstantData);
 
 	// Pipeline State for point lights
-	CD3DX12_ROOT_PARAMETER rootParameters[6] = { };
+	CD3DX12_ROOT_PARAMETER rootParameters[8] = { };
 	rootParameters[0].InitAsShaderResourceView(0);
 	D3D12_DESCRIPTOR_RANGE pointLightConstantsRange = CD3DX12_DESCRIPTOR_RANGE(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
 	rootParameters[1].InitAsDescriptorTable(1, &pointLightConstantsRange);
@@ -141,6 +143,10 @@ Starlight::Starlight(ID3D12Device* device, const MeshFormat& meshFormat) : _Mesh
 	rootParameters[4].InitAsDescriptorTable(1, &meshVerticesRange);
 	D3D12_DESCRIPTOR_RANGE meshIndicesRange = CD3DX12_DESCRIPTOR_RANGE(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, STARLIGHT_MAX_MESHES, 0, 2);
 	rootParameters[5].InitAsDescriptorTable(1, &meshIndicesRange);
+	D3D12_DESCRIPTOR_RANGE meshDiffuseTexturesRange = CD3DX12_DESCRIPTOR_RANGE(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, STARLIGHT_MAX_MESHES, 0, 3);
+	rootParameters[6].InitAsDescriptorTable(1, &meshDiffuseTexturesRange);
+	D3D12_DESCRIPTOR_RANGE meshNRMTexturesRange = CD3DX12_DESCRIPTOR_RANGE(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, STARLIGHT_MAX_MESHES, 0, 4);
+	rootParameters[7].InitAsDescriptorTable(1, &meshNRMTexturesRange);
 	D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = CD3DX12_ROOT_SIGNATURE_DESC(sizeof(rootParameters) / sizeof(rootParameters[0]), rootParameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 	this->_PointLightRootSignature = this->CreateRootSignature(&rootSignatureDesc);
 	
@@ -337,8 +343,10 @@ void Starlight::BakeLight(ID3D12PipelineState* pipelineState, ID3D12RootSignatur
 	this->_CommandList->SetDescriptorHeaps(sizeof(descriptorHeaps) / sizeof(descriptorHeaps[0]), descriptorHeaps);
 	this->_CommandList->SetGraphicsRootDescriptorTable(1, this->GetBakeResourceGPU(constantBuffer));
 	this->_CommandList->SetGraphicsRootDescriptorTable(3, this->_SamplerDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-	this->_CommandList->SetGraphicsRootDescriptorTable(4, this->GetMeshResourceGPU(0, MeshResource::VertexBuffer));
-	this->_CommandList->SetGraphicsRootDescriptorTable(5, this->GetMeshResourceGPU(0, MeshResource::IndexBuffer));
+	this->_CommandList->SetGraphicsRootDescriptorTable(4, this->GetBakeResourceGPU(BakeResource::MeshVertexBuffers));
+	this->_CommandList->SetGraphicsRootDescriptorTable(5, this->GetBakeResourceGPU(BakeResource::MeshIndexBuffers));
+	this->_CommandList->SetGraphicsRootDescriptorTable(6, this->GetBakeResourceGPU(BakeResource::MeshDiffuseTextures));
+	this->_CommandList->SetGraphicsRootDescriptorTable(7, this->GetBakeResourceGPU(BakeResource::MeshNRMTextures));
 
 	D3D12_VIEWPORT viewport = CD3DX12_VIEWPORT(0.0f, 0.0f, (float)outputBuffer->Width, (float)outputBuffer->Height);
 	this->_CommandList->RSSetViewports(1, &viewport);
@@ -412,7 +420,12 @@ ID3D12Resource* Starlight::CreateBuffer(size_t size, const char* data)
 ID3D12Resource* Starlight::CreateTexture(size_t width, size_t height, size_t stride, DXGI_FORMAT format, const char* data)
 {
 	D3D12_RESOURCE_DESC textureDesc = CD3DX12_RESOURCE_DESC::Tex2D(format, width, height, 1, 1, 1, 0);
-	return this->CreateResource(&textureDesc, stride, stride * height, data);
+	ID3D12Resource* texture = this->CreateResource(&textureDesc, stride, stride * height, data);
+
+	this->TransitionResource(texture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ);
+	//this->ExecuteAndReset(); // We can probably let this run with whatever the next graphics work is
+
+	return texture;
 }
 
 void CopyTextureRows(void* destination, size_t destinationStride, const void* source, size_t sourceStride, size_t rows)
@@ -740,7 +753,9 @@ void Starlight::AddMesh(const MeshInfo* meshInfo, const MaterialInfo* materialIn
 
 	// Textures
 	mesh->DiffuseTexture = this->CreateTexture(materialInfo->DiffuseTexture.Width, materialInfo->DiffuseTexture.Height, materialInfo->DiffuseTexture.Stride, DXGI_FORMAT_R8G8B8A8_UNORM, (const char*)materialInfo->DiffuseTexture.PixelData);
+	this->_Device->CreateShaderResourceView(mesh->DiffuseTexture, nullptr, this->GetMeshResourceCPU(this->_MeshCount, MeshResource::DiffuseTexture));
 	mesh->NormalRoughnessMetallicTexture = this->CreateTexture(materialInfo->NormalRoughnessMetallicTexture.Width, materialInfo->NormalRoughnessMetallicTexture.Height, materialInfo->NormalRoughnessMetallicTexture.Stride, DXGI_FORMAT_R8G8B8A8_UNORM, (const char*)materialInfo->NormalRoughnessMetallicTexture.PixelData);
+	this->_Device->CreateShaderResourceView(mesh->NormalRoughnessMetallicTexture, nullptr, this->GetMeshResourceCPU(this->_MeshCount, MeshResource::NormalRoughnessMetallicTexture));
 
 	// Create bottom-level acceleration structure
 	D3D12_RAYTRACING_GEOMETRY_DESC geoDesc = { };

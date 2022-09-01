@@ -19,7 +19,7 @@ using namespace DirectX;
 
 #define BYTES_PER_PIXEL (4)
 #define SKYBOX_FACE_COUNT (6)
-#define LIGHT_MASK_RESOLUTION (2048)
+#define LIGHT_MASK_RESOLUTION (1024)
 #define INPUT_MESH_FILENAME "test_mesh.obj"
 
 #define BAKE_POINT_LIGHT
@@ -243,6 +243,18 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 	};
 	//_Starlight->AddMesh(&firstMesh, &firstMaterial);
 
+	int diffuseWidth;
+	int diffuseHeight;
+	uint8_t* meshDiffuseTexture = stbi_load("assets/RoomThing_Albedo.png", &diffuseWidth, &diffuseHeight, nullptr, 4);
+	int normalWidth;
+	int normalHeight;
+	uint8_t* meshNRMTexture = stbi_load("assets/RoomThing_NormalRoughnessMetallic.png", &normalWidth, &normalHeight, nullptr, 4);
+	MaterialInfo meshMaterial = {
+		{ &meshDiffuseTexture[0], BYTES_PER_PIXEL * diffuseWidth, diffuseWidth, diffuseHeight },
+		{ &meshNRMTexture[0], BYTES_PER_PIXEL * normalWidth, normalWidth, normalHeight },
+		{ 1.0f, 1.0f, 1.0f },
+	};
+
 	// Load the mesh in suzanne.obj
 	tinyobj::ObjReaderConfig readerConfig;
 	tinyobj::ObjReader reader;
@@ -298,7 +310,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 			ComputeTangents(vertices, triangleCount * 3, indices, triangleCount * 3);
 
 			MeshInfo meshInfo = { vertices, sizeof(vertices[0]), triangleCount * 3, indices, sizeof(indices[0]), triangleCount * 3};
-			_Starlight->AddMesh(&meshInfo, &firstMaterial);
+			_Starlight->AddMesh(&meshInfo, &meshMaterial);
 
 			delete[] indices;
 			delete[] vertices;
@@ -308,6 +320,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 	{
 		printf("[WARNING]: Could not load assets/suzanne.obj!");
 	}
+
+	stbi_image_free(meshDiffuseTexture);
+	stbi_image_free(meshNRMTexture);
 
 	//
 	// DO BAKE
@@ -327,7 +342,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 #endif
 
 #ifdef BAKE_DIRECTIONAL_LIGHT
-	DirectionalLight directionalLight = { { 1.0f, -3.0f, -2.0f } };
+	DirectionalLight directionalLight = { { -1.0f, -3.0f, -2.0f } };
 	uint8_t* directionalLightMaskBytes = new uint8_t[outputStride * LIGHT_MASK_RESOLUTION];
 	OutputBuffer directionalLightMask = { &directionalLightMaskBytes[0], outputStride, LIGHT_MASK_RESOLUTION, LIGHT_MASK_RESOLUTION };
 	_Starlight->BakeDirectionalLight(&directionalLight, &directionalLightMask);

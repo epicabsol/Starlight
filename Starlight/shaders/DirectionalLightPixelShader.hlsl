@@ -45,5 +45,5 @@ float4 PSMain(LightmapPixel input) : SV_Target0
     
     float3 indirectIrradiance = IndirectIrradiance(input.WorldPosition, input.WorldNormal, input.WorldTangent, input.WorldBitangent, input.LightmapCoord);
     
-    return float4(directIrradiance + indirectIrradiance, 1.0f);
+    return float4(directIrradiance + indirectIrradiance * float3(1.0f, 1.0f, 1.0f), 1.0f);
 }
