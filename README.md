@@ -9,8 +9,9 @@ Starlight uses DirectX 12 and DXR to bake light masks for point lights, directio
 
 Starlight is meant to be consumed from both C++ as a static library, and from other languages as a dynamic-link library with unmangled exports (`cstarlight`).
 
-StarlightDemo is a command-line application that aims to demonstrate how to bake light masks with Starlight, while being as simple and clean as possible.
+`/StarlightDemo/` is a sample command-line application that aims to demonstrate how to bake light masks with Starlight, while being as simple and clean as possible.
 
+`/StarlightShowcase/` is a sample Windows application that lets the user arrange lights and models, bake the light masks with Starlight, and then view them in the 3D viewport.
 
 Light Masks
 -----------

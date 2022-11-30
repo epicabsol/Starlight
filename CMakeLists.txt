@@ -5,3 +5,5 @@ project(Starlight)
 add_subdirectory(Starlight)
 
 add_subdirectory(StarlightDemo)
+
+add_subdirectory(StarlightShowcase)
