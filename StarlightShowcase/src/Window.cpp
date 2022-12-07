@@ -94,7 +94,7 @@ LRESULT Window::OnCreate()
 
 	hr = this->_SwapChain->GetBuffer(0, IID_PPV_ARGS(&this->_Backbuffer));
 
-	this->_Pipeline = new DeferredPipeline(this, this->_Backbuffer, clientRect.right - clientRect.left, clientRect.bottom - clientRect.top);
+	this->_Pipeline = new DeferredPipeline(this->_Device, this->_Backbuffer, clientRect.right - clientRect.left, clientRect.bottom - clientRect.top);
 
 	return 0;
 }
@@ -134,7 +134,33 @@ LRESULT Window::OnDestroy()
 LRESULT Window::OnPaint()
 {
 	this->Render();
+
+	ValidateRect(this->_Handle, nullptr);
 	
+	return 0;
+}
+
+LRESULT Window::OnResize(int resizeType, unsigned int clientWidth, unsigned int clientHeight)
+{
+	if (resizeType == SIZE_MINIMIZED)
+	{
+		this->_Visible = false;
+	}
+	else if (resizeType != SIZE_MAXSHOW && resizeType != SIZE_MAXHIDE)
+	{
+		this->_Visible = true;
+		if (this->_Backbuffer != nullptr)
+		{
+			this->_Pipeline->ReleaseBuffers();
+			this->_Backbuffer->Release();
+			this->_Backbuffer = nullptr;
+		}
+
+		this->_SwapChain->ResizeBuffers(0, clientWidth, clientHeight, DXGI_FORMAT_UNKNOWN, 0);
+
+		this->_SwapChain->GetBuffer(0, IID_PPV_ARGS(&this->_Backbuffer));
+		this->_Pipeline->RecreateBuffers(this->_Backbuffer, (size_t)clientWidth, (size_t)clientHeight);
+	}
 	return 0;
 }
 
@@ -157,6 +183,8 @@ LRESULT Window::WindowProc(HWND handle, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		return window->OnDestroy();
 	case WM_PAINT:
 		return window->OnPaint();
+	case WM_SIZE:
+		return window->OnResize(wParam, LOWORD(lParam), HIWORD(lParam));
 	}
 	return DefWindowProc(handle, uMsg, wParam, lParam);
 }

@@ -3,14 +3,11 @@
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdLine, int nCmdShow)
 {
+	SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
 	Window* window = new Window(hInstance, L"Starlight Showcase");
 
 	MSG msg = { };
-	/*while (GetMessage(&msg, NULL, 0, 0) > 0)
-	{
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
-	}*/
 
 	bool wantsQuit = false;
 	int exitCode = 0;
@@ -31,7 +28,16 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 		if (!wantsQuit)
 		{
 			window->Update(0.0f); // TODO: Get elapsed time!
-			window->Render();
+
+			// Render if window is visible, otherwise yield CPU time
+			if (window->IsVisible())
+			{
+				window->Render();
+			}
+			else
+			{
+				Sleep(0);
+			}
 		}
 	}
 

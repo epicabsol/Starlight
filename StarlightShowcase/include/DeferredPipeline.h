@@ -9,14 +9,18 @@ class Window;
 class DeferredPipeline
 {
 private:
-	Window* _Window;
+	ID3D11Device* _Device;
+	ID3D11DeviceContext* _ImmediateContext;
 	ID3D11Texture2D* _OutputTexture;
 	ID3D11RenderTargetView* _OutputRTV = nullptr;
 	size_t _Width;
 	size_t _Height;
 
+	void CreateSizeDependentResources();
+	void DestroySizeDependentResources();
+
 public:
-	DeferredPipeline(Window* window, ID3D11Texture2D* outputTexture, size_t width, size_t height);
+	DeferredPipeline(ID3D11Device* device, ID3D11Texture2D* outputTexture, size_t width, size_t height);
 	~DeferredPipeline();
 
 	void ReleaseBuffers();

@@ -15,6 +15,7 @@ class Window
 private:
 	HWND _Handle;
 	static bool _WindowClassRegistered;
+	bool _Visible = false;
 
 	ID3D11Device* _Device = nullptr;
 	ID3D11DeviceContext* _ImmediateContext = nullptr;
@@ -27,6 +28,7 @@ public:
 	Window(HINSTANCE application, wchar_t* caption, HWND parent = NULL, int x = CW_USEDEFAULT, int y = CW_USEDEFAULT, int width = CW_USEDEFAULT, int height = CW_USEDEFAULT);
 	~Window();
 
+	inline bool IsVisible() const { return this->_Visible; }
 	inline ID3D11Device* GetDevice() const { return this->_Device; }
 	inline ID3D11DeviceContext* GetImmediateContext() const { return this->_ImmediateContext; }
 
@@ -41,6 +43,7 @@ protected:
 	LRESULT OnCreate();
 	LRESULT OnDestroy();
 	LRESULT OnPaint();
+	LRESULT OnResize(int resizeType, unsigned int clientWidth, unsigned int clientHeight);
 
 private:
 	static LRESULT CALLBACK WindowProc(HWND handle, UINT uMsg, WPARAM wParam, LPARAM lParam);
