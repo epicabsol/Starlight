@@ -23,6 +23,8 @@ public:
 	DeferredPipeline(ID3D11Device* device, ID3D11Texture2D* outputTexture, size_t width, size_t height);
 	~DeferredPipeline();
 
+	inline ID3D11RenderTargetView* GetOutputRTV() const { return this->_OutputRTV; }
+
 	void ReleaseBuffers();
 	void RecreateBuffers(ID3D11Texture2D* outputTexture, size_t width, size_t height);
 

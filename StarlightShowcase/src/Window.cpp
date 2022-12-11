@@ -2,6 +2,9 @@
 
 #include "DeferredPipeline.h"
 
+#include <imgui/backend/imgui_impl_win32.h>
+#include <imgui/backend/imgui_impl_dx11.h>
+
 #define WINDOW_CLASS L"StarlightShowcase"
 
 bool Window::_WindowClassRegistered = false;
@@ -51,13 +54,26 @@ void Window::Close()
 
 void Window::Update(float deltaTime)
 {
+	ImGui_ImplWin32_NewFrame();
+	ImGui::NewFrame();
+	ImGui::GetIO().FontGlobalScale = ImGui_ImplWin32_GetDpiScaleForHwnd(this->_Handle);
 
+	ImGui::ShowDemoWindow();
+
+	ImGui::Render();
 }
 
 void Window::Render()
 {
+	ImGui_ImplDX11_NewFrame();
+
 	this->_Pipeline->Draw();
-	this->_SwapChain->Present(0, 0);
+
+	ID3D11RenderTargetView* rtv = this->_Pipeline->GetOutputRTV();
+	this->_ImmediateContext->OMSetRenderTargets(1, &rtv, nullptr);
+	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+
+	this->_SwapChain->Present(1, 0);
 }
 
 // Window messages
@@ -96,11 +112,25 @@ LRESULT Window::OnCreate()
 
 	this->_Pipeline = new DeferredPipeline(this->_Device, this->_Backbuffer, clientRect.right - clientRect.left, clientRect.bottom - clientRect.top);
 
+	ImGui::CreateContext();
+	ImGui_ImplWin32_Init(this->_Handle);
+	ImGui_ImplDX11_Init(this->_Device, this->_ImmediateContext);
+
+	ImGui_ImplWin32_NewFrame();
+	ImGui_ImplDX11_NewFrame();
+	ImGui::NewFrame();
+	ImGui::GetIO().FontGlobalScale = ImGui_ImplWin32_GetDpiScaleForHwnd(this->_Handle);
+	ImGui::Render();
+
 	return 0;
 }
 
 LRESULT Window::OnDestroy()
 {
+	ImGui_ImplDX11_Shutdown();
+	ImGui_ImplWin32_Shutdown();
+	ImGui::DestroyContext();
+
 	if (this->_Pipeline != nullptr)
 	{
 		delete this->_Pipeline;
@@ -166,25 +196,37 @@ LRESULT Window::OnResize(int resizeType, unsigned int clientWidth, unsigned int 
 
 // Window procedure
 
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+#include <stdio.h>
 LRESULT Window::WindowProc(HWND handle, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	Window* window = (Window*)GetWindowLongPtrW(handle, GWLP_USERDATA);
+	LRESULT imguiResult = ImGui_ImplWin32_WndProcHandler(handle, uMsg, wParam, lParam);
 
-	switch (uMsg)
+	if (imguiResult != 0)
 	{
-	case WM_CREATE:
+		return imguiResult;
+	}
+	else
 	{
-		CREATESTRUCT* createStruct = (CREATESTRUCT*)lParam;
-		window = (Window*)createStruct->lpCreateParams;
-		window->_Handle = handle;
-		return window->OnCreate();
+		Window* window = (Window*)GetWindowLongPtrW(handle, GWLP_USERDATA);
+
+		switch (uMsg)
+		{
+		case WM_CREATE:
+		{
+			CREATESTRUCT* createStruct = (CREATESTRUCT*)lParam;
+			window = (Window*)createStruct->lpCreateParams;
+			window->_Handle = handle;
+			return window->OnCreate();
+		}
+		case WM_DESTROY:
+			return window->OnDestroy();
+		case WM_PAINT:
+			return window->OnPaint();
+		case WM_SIZE:
+			return window->OnResize(wParam, LOWORD(lParam), HIWORD(lParam));
+		}
+		return DefWindowProc(handle, uMsg, wParam, lParam);
 	}
-	case WM_DESTROY:
-		return window->OnDestroy();
-	case WM_PAINT:
-		return window->OnPaint();
-	case WM_SIZE:
-		return window->OnResize(wParam, LOWORD(lParam), HIWORD(lParam));
-	}
-	return DefWindowProc(handle, uMsg, wParam, lParam);
 }
