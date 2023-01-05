@@ -1,4 +1,4 @@
-#include "DeferredPipeline.h"
+#include "render/DeferredPipeline.h"
 
 #include "Window.h"
 
@@ -44,6 +44,9 @@ void DeferredPipeline::RecreateBuffers(ID3D11Texture2D* outputTexture, size_t wi
 
 void DeferredPipeline::Draw()
 {
-	float clearColor[] = { 0.1f, 0.6f, 0.9f, 1.0f };
+	float clearColor[] = { 0.1f, 0.1f, 0.1f, 1.0f };
 	this->_ImmediateContext->ClearRenderTargetView(this->_OutputRTV, clearColor);
+	D3D11_VIEWPORT viewport = { 0.0f, 0.0f, (float)this->_Width, (float)this->_Height, 0.0f, 1.0f };
+	this->_ImmediateContext->RSSetViewports(1, &viewport);
+
 }
