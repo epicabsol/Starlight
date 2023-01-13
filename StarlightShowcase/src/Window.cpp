@@ -20,6 +20,21 @@ using namespace DirectX;
 
 bool Window::_WindowClassRegistered = false;
 
+void Window::CenterCursor()
+{
+	this->_IsCenteringCursor = true;
+
+	RECT r;
+	GetClientRect(this->_Handle, &r);
+	int width = r.right - r.left;
+	int height = r.bottom - r.top;
+	POINT origin = { 0, 0 };
+	ClientToScreen(this->_Handle, &origin);
+	SetCursorPos(origin.x + width / 2, origin.y + height / 2);
+
+	this->_IsCenteringCursor = false;
+}
+
 Window::Window(HINSTANCE application, wchar_t* caption, HWND parent, int x, int y, int width, int height)
 {
 	// Register the window class if it has not already been registered
@@ -311,6 +326,9 @@ LRESULT Window::OnMouseDown(int button, int x, int y)
 {
 	if (this->_CameraController.MouseDown(button))
 	{
+		GetCursorPos(&this->_OriginalCursorPosition);
+		ShowCursor(false);
+		this->CenterCursor();
 		return 0;
 	}
 
@@ -321,6 +339,8 @@ LRESULT Window::OnMouseUp(int button, int x, int y)
 {
 	if (this->_CameraController.MouseUp(button))
 	{
+		SetCursorPos(this->_OriginalCursorPosition.x, this->_OriginalCursorPosition.y);
+		ShowCursor(true);
 		return 0;
 	}
 
@@ -340,18 +360,11 @@ LRESULT Window::OnMouseMove(int x, int y)
 	GetClientRect(this->_Handle, &r);
 	int width = r.right - r.left;
 	int height = r.bottom - r.top;
-	char foo[255];
-	sprintf(foo, "x offset: %d, y offset: %d\n", x - width / 2, y - height / 2);
-	OutputDebugStringA(foo);
-	float relativeX = ((float)(x - width / 2) / width) * 2.0f;
-	float relativeY = ((float)(y - height / 2) / height) * 2.0f;
-	POINT origin = { 0, 0 };
-	ClientToScreen(this->_Handle, &origin);
+	float relativeX = (float)(x - width / 2);
+	float relativeY = (float)(y - height / 2);
 	if (this->_CameraController.MouseMove(relativeX, relativeY))
 	{
-		centering = true;
-		SetCursorPos(origin.x + width / 2, origin.y + height / 2);
-		centering = false;
+		this->CenterCursor();
 	}
 }
 

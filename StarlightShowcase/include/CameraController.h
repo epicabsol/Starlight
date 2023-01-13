@@ -18,6 +18,7 @@ private:
 	//DirectX::XMFLOAT3 _Center;
 
 	float _MovementSpeed = 3.0f;
+	float _RotationSensitivity = 0.004f; // Radians per pixel
 
 	// Input state
 	bool _FirstPersonLooking : 1;

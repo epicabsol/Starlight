@@ -35,6 +35,8 @@ private:
 	HWND _Handle;
 	static bool _WindowClassRegistered;
 	bool _Visible = false;
+	bool _IsCenteringCursor = false;
+	POINT _OriginalCursorPosition;
 
 	Camera _Camera = Camera();
 	CameraController _CameraController = CameraController();
@@ -50,6 +52,8 @@ private:
 	ConstantBuffer<WidgetConstants>* _WidgetConstantBuffer = nullptr;
 	ConstantBuffer<FrameConstants>* _FrameConstantBuffer = nullptr;
 	Mesh* _GridMesh = nullptr;
+
+	void CenterCursor();
 
 public:
 	Window(HINSTANCE application, wchar_t* caption, HWND parent = NULL, int x = CW_USEDEFAULT, int y = CW_USEDEFAULT, int width = CW_USEDEFAULT, int height = CW_USEDEFAULT);

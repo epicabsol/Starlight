@@ -202,8 +202,8 @@ bool CameraController::MouseMove(float dx, float dy)
 {
 	if (this->_FirstPersonLooking)
 	{
-		this->_Pitch -= dy;
-		this->_Yaw += dx;
+		this->_Pitch -= dy * this->_RotationSensitivity;
+		this->_Yaw += dx * this->_RotationSensitivity;
 		return true;
 	}
 	else if (this->_OrbitActive)
