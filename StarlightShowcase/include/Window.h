@@ -10,6 +10,11 @@
 #include "DirectXMath.h"
 
 #include "Camera.h"
+#include "CameraController.h"
+
+#define MOUSE_BUTTON_LEFT (0)
+#define MOUSE_BUTTON_RIGHT (1)
+#define MOUSE_BUTTON_MIDDLE (2)
 
 class DeferredPipeline;
 class Technique;
@@ -32,6 +37,7 @@ private:
 	bool _Visible = false;
 
 	Camera _Camera = Camera();
+	CameraController _CameraController = CameraController();
 
 	ID3D11Device* _Device = nullptr;
 	ID3D11DeviceContext* _ImmediateContext = nullptr;
@@ -67,6 +73,11 @@ protected:
 	LRESULT OnDestroy();
 	LRESULT OnPaint();
 	LRESULT OnResize(int resizeType, unsigned int clientWidth, unsigned int clientHeight);
+	LRESULT OnKeyDown(int virtualKey);
+	LRESULT OnKeyUp(int virtualKey);
+	LRESULT OnMouseDown(int button, int x, int y);
+	LRESULT OnMouseUp(int button, int x, int y);
+	LRESULT OnMouseMove(int x, int y);
 
 private:
 	static LRESULT CALLBACK WindowProc(HWND handle, UINT uMsg, WPARAM wParam, LPARAM lParam);

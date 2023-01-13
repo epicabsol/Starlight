@@ -4,7 +4,7 @@ using namespace DirectX;
 
 XMMATRIX XM_CALLCONV Camera::RecalculateViewMatrix() const
 {
-	XMMATRIX view = XMMatrixMultiply(XMMatrixTranslationFromVector(XMVectorNegate(this->GetPosition())), XMMatrixRotationQuaternion(this->GetRotation()));
+	XMMATRIX view = XMMatrixMultiply(XMMatrixTranslationFromVector(XMVectorNegate(this->GetPosition())), XMMatrixRotationQuaternion(XMQuaternionInverse(this->GetRotation())));
 	XMStoreFloat4x4(&this->_ViewMatrix, view);
 	this->_ViewMatrixStale = false;
 	return view;

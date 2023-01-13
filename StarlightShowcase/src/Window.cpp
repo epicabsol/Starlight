@@ -12,6 +12,8 @@
 #include <imgui/backend/imgui_impl_win32.h>
 #include <imgui/backend/imgui_impl_dx11.h>
 
+#include "windowsx.h"
+
 using namespace DirectX;
 
 #define WINDOW_CLASS L"StarlightShowcase"
@@ -66,6 +68,10 @@ void Window::Update(float deltaTime)
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
 	ImGui::GetIO().FontGlobalScale = ImGui_ImplWin32_GetDpiScaleForHwnd(this->_Handle);
+
+	this->_CameraController.Update(deltaTime);
+	this->_Camera.SetPosition(this->_CameraController.GetCameraPosition());
+	this->_Camera.SetRotation(this->_CameraController.GetCameraRotation());
 
 	ImGui::ShowDemoWindow();
 
@@ -281,6 +287,74 @@ LRESULT Window::OnResize(int resizeType, unsigned int clientWidth, unsigned int 
 	return 0;
 }
 
+LRESULT Window::OnKeyDown(int virtualKey)
+{
+	if (this->_CameraController.KeyDown(virtualKey))
+	{
+		return 0;
+	}
+
+	return 0;
+}
+
+LRESULT Window::OnKeyUp(int virtualKey)
+{
+	if (this->_CameraController.KeyUp(virtualKey))
+	{
+		return 0;
+	}
+
+	return 0;
+}
+
+LRESULT Window::OnMouseDown(int button, int x, int y)
+{
+	if (this->_CameraController.MouseDown(button))
+	{
+		return 0;
+	}
+
+	return 0;
+}
+
+LRESULT Window::OnMouseUp(int button, int x, int y)
+{
+	if (this->_CameraController.MouseUp(button))
+	{
+		return 0;
+	}
+
+	return 0;
+}
+#include <cstdio>
+LRESULT Window::OnMouseMove(int x, int y)
+{
+	static bool centering = false;
+
+	if (centering)
+	{
+		return 0;
+	}
+
+	RECT r;
+	GetClientRect(this->_Handle, &r);
+	int width = r.right - r.left;
+	int height = r.bottom - r.top;
+	char foo[255];
+	sprintf(foo, "x offset: %d, y offset: %d\n", x - width / 2, y - height / 2);
+	OutputDebugStringA(foo);
+	float relativeX = ((float)(x - width / 2) / width) * 2.0f;
+	float relativeY = ((float)(y - height / 2) / height) * 2.0f;
+	POINT origin = { 0, 0 };
+	ClientToScreen(this->_Handle, &origin);
+	if (this->_CameraController.MouseMove(relativeX, relativeY))
+	{
+		centering = true;
+		SetCursorPos(origin.x + width / 2, origin.y + height / 2);
+		centering = false;
+	}
+}
+
 // Window procedure
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -313,6 +387,40 @@ LRESULT Window::WindowProc(HWND handle, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			return window->OnPaint();
 		case WM_SIZE:
 			return window->OnResize(wParam, LOWORD(lParam), HIWORD(lParam));
+		case WM_KEYDOWN:
+		case WM_SYSKEYDOWN:
+			return window->OnKeyDown(wParam);
+		case WM_KEYUP:
+		case WM_SYSKEYUP:
+			return window->OnKeyUp(wParam);
+		case WM_LBUTTONDOWN:
+		case WM_MBUTTONDOWN:
+		case WM_RBUTTONDOWN:
+		{
+			int button = 0;
+			if (uMsg == WM_LBUTTONDOWN)
+				button = MOUSE_BUTTON_LEFT;
+			else if (uMsg == WM_MBUTTONDOWN)
+				button = MOUSE_BUTTON_MIDDLE;
+			else if (uMsg == WM_RBUTTONDOWN)
+				button = MOUSE_BUTTON_RIGHT;
+			return window->OnMouseDown(button, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+		}
+		case WM_LBUTTONUP:
+		case WM_MBUTTONUP:
+		case WM_RBUTTONUP:
+		{
+			int button = 0;
+			if (uMsg == WM_LBUTTONUP)
+				button = MOUSE_BUTTON_LEFT;
+			else if (uMsg == WM_MBUTTONUP)
+				button = MOUSE_BUTTON_MIDDLE;
+			else if (uMsg == WM_RBUTTONUP)
+				button = MOUSE_BUTTON_RIGHT;
+			return window->OnMouseUp(button, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+		}
+		case WM_MOUSEMOVE:
+			return window->OnMouseMove(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
 		}
 		return DefWindowProc(handle, uMsg, wParam, lParam);
 	}

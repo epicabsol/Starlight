@@ -27,7 +27,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 
 		if (!wantsQuit)
 		{
-			window->Update(0.0f); // TODO: Get elapsed time!
+			window->Update(1.0f / 60.0f); // TODO: Get elapsed time!
 
 			// Render if window is visible, otherwise yield CPU time
 			if (window->IsVisible())
