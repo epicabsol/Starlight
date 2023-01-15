@@ -20,19 +20,22 @@ using namespace DirectX;
 
 bool Window::_WindowClassRegistered = false;
 
-void Window::CenterCursor()
+void Window::SetWrapCursor(bool wrapCursor)
 {
-	this->_IsCenteringCursor = true;
-
-	RECT r;
-	GetClientRect(this->_Handle, &r);
-	int width = r.right - r.left;
-	int height = r.bottom - r.top;
-	POINT origin = { 0, 0 };
-	ClientToScreen(this->_Handle, &origin);
-	SetCursorPos(origin.x + width / 2, origin.y + height / 2);
-
-	this->_IsCenteringCursor = false;
+	this->_WrapCursor = wrapCursor;
+	if (wrapCursor)
+	{
+		RECT clipRect;
+		GetClientRect(this->_Handle, &clipRect);
+		ClientToScreen(this->_Handle, (POINT*)&clipRect.left);
+		clipRect.right += clipRect.left;
+		clipRect.bottom += clipRect.top;
+		ClipCursor(&clipRect);
+	}
+	else
+	{
+		ClipCursor(nullptr);
+	}
 }
 
 Window::Window(HINSTANCE application, wchar_t* caption, HWND parent, int x, int y, int width, int height)
@@ -181,8 +184,7 @@ LRESULT Window::OnCreate()
 	RECT clientRect = { };
 	GetClientRect(this->_Handle, &clientRect);
 	this->_Camera.SetAspectRatio((float)(clientRect.right - clientRect.left) / (clientRect.bottom - clientRect.top));
-	this->_Camera.SetPosition(XMVectorSet(-10.0f, 2.0f, -10.0f, 1.0f));
-	this->_Camera.SetRotation(XMQuaternionRotationAxis(XMVectorSet(0.0f, 1.0f, 0.0f, 1.0f), -1 * 3.14159265f / 4.0f));
+	this->_CameraController.SetViewThirdPerson(XMVectorZero(), 10.0f, -3.1415f / 4.0f, -3.1415f / 4.0f);
 
 	DXGI_SWAP_CHAIN_DESC scDesc = { { clientRect.right - clientRect.left, clientRect.bottom - clientRect.top, { 60, 1 }, DXGI_FORMAT_B8G8R8A8_UNORM }, { 1, 0 }, DXGI_USAGE_RENDER_TARGET_OUTPUT, 2, this->_Handle, TRUE, DXGI_SWAP_EFFECT_FLIP_DISCARD, 0 };
 	hr = factory->CreateSwapChain(this->_Device, &scDesc, &this->_SwapChain);
@@ -327,8 +329,10 @@ LRESULT Window::OnMouseDown(int button, int x, int y)
 	if (this->_CameraController.MouseDown(button))
 	{
 		GetCursorPos(&this->_OriginalCursorPosition);
+		this->_LastCursorPosition.x = x;
+		this->_LastCursorPosition.y = y;
+		this->SetWrapCursor(true);
 		ShowCursor(false);
-		this->CenterCursor();
 		return 0;
 	}
 
@@ -339,6 +343,7 @@ LRESULT Window::OnMouseUp(int button, int x, int y)
 {
 	if (this->_CameraController.MouseUp(button))
 	{
+		this->SetWrapCursor(false);
 		SetCursorPos(this->_OriginalCursorPosition.x, this->_OriginalCursorPosition.y);
 		ShowCursor(true);
 		return 0;
@@ -346,26 +351,59 @@ LRESULT Window::OnMouseUp(int button, int x, int y)
 
 	return 0;
 }
-#include <cstdio>
+
 LRESULT Window::OnMouseMove(int x, int y)
 {
-	static bool centering = false;
-
-	if (centering)
+	if (this->_IsWrappingCursor)
 	{
 		return 0;
 	}
 
-	RECT r;
-	GetClientRect(this->_Handle, &r);
-	int width = r.right - r.left;
-	int height = r.bottom - r.top;
-	float relativeX = (float)(x - width / 2);
-	float relativeY = (float)(y - height / 2);
+	if (this->_WrapCursor)
+	{
+		RECT r;
+		GetClientRect(this->_Handle, &r);
+
+		if (x == 0 || y == 0 || x == r.right - 1 || y == r.bottom - 1)
+		{
+			if (x == 0)
+			{
+				x = r.right - 2;
+				this->_LastCursorPosition.x += r.right;
+			}
+			if (y == 0)
+			{
+				y = r.bottom - 2;
+				this->_LastCursorPosition.y += r.bottom;
+			}
+			if (x == r.right - 1)
+			{
+				x = 1;
+				this->_LastCursorPosition.x -= r.right;
+			}
+			if (y == r.bottom - 1)
+			{
+				y = 1;
+				this->_LastCursorPosition.y -= r.bottom;
+			}
+
+			this->_IsWrappingCursor = true;
+			POINT newPos = { x, y };
+			ClientToScreen(this->_Handle, &newPos);
+			SetCursorPos(newPos.x, newPos.y);
+			this->_IsWrappingCursor = false;
+		}
+	}
+
+	float relativeX = (float)x - this->_LastCursorPosition.x;
+	float relativeY = (float)y - this->_LastCursorPosition.y;
 	if (this->_CameraController.MouseMove(relativeX, relativeY))
 	{
-		this->CenterCursor();
+		
 	}
+
+	this->_LastCursorPosition.x = x;
+	this->_LastCursorPosition.y = y;
 }
 
 // Window procedure

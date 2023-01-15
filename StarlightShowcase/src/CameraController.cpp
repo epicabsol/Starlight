@@ -8,10 +8,7 @@
 
 using namespace DirectX;
 
-#define VK_LEFTCTRL (162)
-#define VK_RIGHTCTRL (163)
-#define VK_LEFTALT (164)
-#define VK_RIGHTALT (165)
+#define CAMERACONTROLLER_MINIMUM_ZOOM (0.05f)
 
 void XM_CALLCONV CameraController::SetViewFirstPerson(const XMVECTOR position, float pitch, float yaw)
 {
@@ -20,44 +17,56 @@ void XM_CALLCONV CameraController::SetViewFirstPerson(const XMVECTOR position, f
 	this->_Yaw = yaw;
 }
 
+void XM_CALLCONV CameraController::SetViewThirdPerson(const XMVECTOR center, float distance, float pitch, float yaw)
+{
+	this->_Pitch = pitch;
+	this->_Yaw = yaw;
+	this->_Distance = distance;
+	XMStoreFloat3(&this->_Position, XMVectorAdd(center, XMVectorScale(this->GetForwardVector(), -distance)));
+}
+
 void CameraController::Update(float deltaTime)
 {
-	XMVECTOR position = this->GetCameraPosition();
+	XMVECTOR movement = XMVectorZero();
 	XMVECTOR rotation = this->GetCameraRotation();
-	XMVECTOR forwards = XMVector3Rotate(XMVectorSet(0.0f, 0.0f, this->_MovementSpeed * deltaTime, 0.0f), rotation);
-	XMVECTOR right = XMVector3Rotate(XMVectorSet(this->_MovementSpeed * deltaTime, 0.0f, 0.0f, 0.0f), rotation);
+	float speed = this->_MovementSpeed * (this->_StrafeSprintPressed ? this->_SprintSpeedFactor : 1.0f);
+	XMVECTOR forwards = this->GetForwardVector();
+	XMVECTOR right = this->GetRightVector();
+	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 
 	if (this->_StrafeUpPressed)
 	{
-		position = XMVectorAdd(position, XMVectorSet(0.0f, this->_MovementSpeed * deltaTime, 0.0f, 0.0f));
+		movement = XMVectorAdd(movement, up);
 	}
 	
 	if (this->_StrafeDownPressed)
 	{
-		position = XMVectorAdd(position, XMVectorSet(0.0f, -this->_MovementSpeed * deltaTime, 0.0f, 0.0f));
+		movement = XMVectorAdd(movement, XMVectorNegate(up));
 	}
 
 	if (this->_StrafeForwardPressed)
 	{
-		position = XMVectorAdd(position, forwards);
+		movement = XMVectorAdd(movement, forwards);
 	}
 
 	if (this->_StrafeBackwardPressed)
 	{
-		position = XMVectorAdd(position, XMVectorNegate(forwards));
+		movement = XMVectorAdd(movement, XMVectorNegate(forwards));
 	}
 
 	if (this->_StrafeRightPressed)
 	{
-		position = XMVectorAdd(position, right);
+		movement = XMVectorAdd(movement, right);
 	}
 
 	if (this->_StrafeLeftPressed)
 	{
-		position = XMVectorAdd(position, XMVectorNegate(right));
+		movement = XMVectorAdd(movement, XMVectorNegate(right));
 	}
 
-	XMStoreFloat3(&this->_Position, position);
+	movement = XMVector3Normalize(movement);
+
+	XMStoreFloat3(&this->_Position, XMVectorAdd(this->GetCameraPosition(), XMVectorScale(movement, speed * deltaTime)));
 }
 
 bool CameraController::KeyDown(int virtualKey)
@@ -92,6 +101,11 @@ bool CameraController::KeyDown(int virtualKey)
 		else if (virtualKey == 'D')
 		{
 			this->_StrafeRightPressed = true;
+			return true;
+		}
+		else if (virtualKey == VK_SHIFT)
+		{
+			this->_StrafeSprintPressed = true;
 			return true;
 		}
 	}
@@ -137,6 +151,11 @@ bool CameraController::KeyUp(int virtualKey)
 	else if (virtualKey == VK_MENU)
 	{
 		this->_ThirdPersonKeyActive = false;
+		return true;
+	}
+	else if (virtualKey == VK_SHIFT)
+	{
+		this->_StrafeSprintPressed = false;
 		return true;
 	}
 }
@@ -208,17 +227,31 @@ bool CameraController::MouseMove(float dx, float dy)
 	}
 	else if (this->_OrbitActive)
 	{
-		// TODO: Implement!
+		XMVECTOR forward = XMVectorScale(this->GetForwardVector(), this->_Distance);
+		XMVECTOR focusPoint = XMVectorAdd(this->GetCameraPosition(), forward);
+		this->_Pitch -= dy * this->_RotationSensitivity;
+		this->_Yaw += dx * this->_RotationSensitivity;
+		forward = XMVectorScale(this->GetForwardVector(), this->_Distance);
+		XMStoreFloat3(&this->_Position, XMVectorSubtract(focusPoint, forward));
 		return true;
 	}
 	else if (this->_PanActive)
 	{
-		// TODO: Implement!
+		XMVECTOR right = XMVectorScale(this->GetRightVector(), -this->_TranslationSensitivity * this->_Distance * dx);
+		XMVECTOR up = XMVectorScale(this->GetUpVector(), this->_TranslationSensitivity * this->_Distance * dy);
+		XMStoreFloat3(&this->_Position, XMVectorAdd(XMVectorAdd(this->GetCameraPosition(), right), up));
 		return true;
 	}
 	else if (this->_ZoomActive)
 	{
-		// TODO: Implement!
+		XMVECTOR forward = this->GetForwardVector();
+		XMVECTOR center = XMVectorAdd(this->GetCameraPosition(), XMVectorScale(forward, this->_Distance));
+		this->_Distance = this->_Distance + dy * this->_Distance * 0.01f;
+		if (this->_Distance < CAMERACONTROLLER_MINIMUM_ZOOM)
+		{
+			this->_Distance = CAMERACONTROLLER_MINIMUM_ZOOM;
+		}
+		XMStoreFloat3(&this->_Position, XMVectorAdd(center, XMVectorScale(forward, -this->_Distance)));
 		return true;
 	}
 	else

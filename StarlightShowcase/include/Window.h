@@ -35,8 +35,10 @@ private:
 	HWND _Handle;
 	static bool _WindowClassRegistered;
 	bool _Visible = false;
-	bool _IsCenteringCursor = false;
+	bool _WrapCursor = false;
+	bool _IsWrappingCursor = false;
 	POINT _OriginalCursorPosition;
+	POINT _LastCursorPosition;
 
 	Camera _Camera = Camera();
 	CameraController _CameraController = CameraController();
@@ -53,7 +55,7 @@ private:
 	ConstantBuffer<FrameConstants>* _FrameConstantBuffer = nullptr;
 	Mesh* _GridMesh = nullptr;
 
-	void CenterCursor();
+	void SetWrapCursor(bool wrapCursor);
 
 public:
 	Window(HINSTANCE application, wchar_t* caption, HWND parent = NULL, int x = CW_USEDEFAULT, int y = CW_USEDEFAULT, int width = CW_USEDEFAULT, int height = CW_USEDEFAULT);
