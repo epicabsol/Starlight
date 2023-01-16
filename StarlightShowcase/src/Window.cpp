@@ -122,8 +122,18 @@ void Window::Render()
 	this->DrawWidgetMesh(this->_GridMesh, XMMatrixIdentity(), XMVectorSet(1.0f, 1.0f, 1.0f, 0.0f));
 
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+}
 
+void Window::Present()
+{
 	this->_SwapChain->Present(1, 0);
+	this->_ImmediateContext->DiscardView(this->_Pipeline->GetOutputRTV());
+	// TODO: Also DiscardView() the depth buffer, once that exists
+}
+
+void Window::WaitOnSwapChain()
+{
+	DWORD result = WaitForSingleObjectEx(this->_SwapChainWaitable, 1000, true);
 }
 
 // Drawing
@@ -170,13 +180,15 @@ LRESULT Window::OnCreate()
 #if _DEBUG
 	deviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
-	HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, NULL, deviceFlags, nullptr, 0, D3D11_SDK_VERSION, &this->_Device, nullptr, &this->_ImmediateContext);
+	ID3D11DeviceContext* immediateContext = nullptr;
+	HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, NULL, deviceFlags, nullptr, 0, D3D11_SDK_VERSION, &this->_Device, nullptr, &immediateContext);
 	if (FAILED(hr))
 	{
 		OutputDebugStringW(L"Failed to create D3D11 device.");
 		this->Close();
 		return 0;
 	}
+	immediateContext->QueryInterface(&this->_ImmediateContext);
 
 	IDXGIFactory* factory = nullptr;
 	hr = CreateDXGIFactory(IID_PPV_ARGS(&factory));
@@ -186,8 +198,12 @@ LRESULT Window::OnCreate()
 	this->_Camera.SetAspectRatio((float)(clientRect.right - clientRect.left) / (clientRect.bottom - clientRect.top));
 	this->_CameraController.SetViewThirdPerson(XMVectorZero(), 10.0f, -3.1415f / 4.0f, -3.1415f / 4.0f);
 
-	DXGI_SWAP_CHAIN_DESC scDesc = { { clientRect.right - clientRect.left, clientRect.bottom - clientRect.top, { 60, 1 }, DXGI_FORMAT_B8G8R8A8_UNORM }, { 1, 0 }, DXGI_USAGE_RENDER_TARGET_OUTPUT, 2, this->_Handle, TRUE, DXGI_SWAP_EFFECT_FLIP_DISCARD, 0 };
-	hr = factory->CreateSwapChain(this->_Device, &scDesc, &this->_SwapChain);
+	DXGI_SWAP_CHAIN_DESC scDesc = { { clientRect.right - clientRect.left, clientRect.bottom - clientRect.top, { 60, 1 }, DXGI_FORMAT_B8G8R8A8_UNORM }, { 1, 0 }, DXGI_USAGE_RENDER_TARGET_OUTPUT, 2, this->_Handle, TRUE, DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT };
+	IDXGISwapChain* swapChain = nullptr;
+	hr = factory->CreateSwapChain(this->_Device, &scDesc, &swapChain); // &this->_SwapChain);
+	swapChain->QueryInterface(&this->_SwapChain);
+	swapChain->Release();
+	this->_SwapChainWaitable = this->_SwapChain->GetFrameLatencyWaitableObject();
 	factory->Release();
 	if (FAILED(hr))
 	{
@@ -251,6 +267,8 @@ LRESULT Window::OnDestroy()
 	}
 	if (this->_SwapChain != nullptr)
 	{
+		CloseHandle(this->_SwapChainWaitable);
+		this->_SwapChainWaitable = NULL;
 		this->_SwapChain->Release();
 		this->_SwapChain = nullptr;
 	}
@@ -294,7 +312,7 @@ LRESULT Window::OnResize(int resizeType, unsigned int clientWidth, unsigned int 
 			this->_Backbuffer = nullptr;
 		}
 
-		this->_SwapChain->ResizeBuffers(0, clientWidth, clientHeight, DXGI_FORMAT_UNKNOWN, 0);
+		this->_SwapChain->ResizeBuffers(0, clientWidth, clientHeight, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT);
 
 		this->_SwapChain->GetBuffer(0, IID_PPV_ARGS(&this->_Backbuffer));
 		this->_Pipeline->RecreateBuffers(this->_Backbuffer, (size_t)clientWidth, (size_t)clientHeight);

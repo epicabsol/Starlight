@@ -13,6 +13,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 	int exitCode = 0;
 	while (!wantsQuit)
 	{
+		window->WaitOnSwapChain();
+
 		// First, process all pending messages
 		while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
 		{
@@ -33,6 +35,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdL
 			if (window->IsVisible())
 			{
 				window->Render();
+
+				window->Present();
 			}
 			else
 			{

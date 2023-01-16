@@ -6,7 +6,8 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
-#include <d3d11.h>
+#include <d3d11_1.h>
+#include <dxgi1_3.h>
 #include "DirectXMath.h"
 
 #include "Camera.h"
@@ -44,9 +45,10 @@ private:
 	CameraController _CameraController = CameraController();
 
 	ID3D11Device* _Device = nullptr;
-	ID3D11DeviceContext* _ImmediateContext = nullptr;
-	IDXGISwapChain* _SwapChain = nullptr;
+	ID3D11DeviceContext1* _ImmediateContext = nullptr;
+	IDXGISwapChain2* _SwapChain = nullptr;
 	ID3D11Texture2D* _Backbuffer = nullptr;
+	HANDLE _SwapChainWaitable;
 
 	DeferredPipeline* _Pipeline = nullptr;
 
@@ -71,6 +73,8 @@ public:
 
 	void Update(float deltaTime);
 	void Render();
+	void Present();
+	void WaitOnSwapChain();
 
 protected:
 	void XM_CALLCONV DrawWidgetMesh(const Mesh* mesh, const DirectX::XMMATRIX transform, const DirectX::XMVECTOR colorOverride);
