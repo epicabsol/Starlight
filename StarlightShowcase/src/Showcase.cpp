@@ -6,6 +6,8 @@
 #include "imgui/imgui.h"
 #include "imgui/imgui_custom.h"
 
+#include "ShowcaseResources.h"
+
 using namespace DirectX;
 
 Showcase::Showcase(HINSTANCE hInstance) : Window(&Window::HandleCreation<Showcase>, hInstance, L"Starlight Showcase")
@@ -161,12 +163,38 @@ void Showcase::OnUpdate(float timeStep)
 		}
 		ImGui::End();
 		ImGui::PopStyleVar(2);
+
+		// Toolbar
+		const float toolbarMargin = 4.0f;
+		ImGuiCustom::BeginToolbar("Toolbar", propertiesWidth + toolbarMargin, ImGui::GetMainViewport()->WorkPos.y + toolbarMargin);
+
+		static int toolIndex = 0;
+		static ShowcaseIcon toolIcons[] =
+		{
+			ShowcaseIcon_ToolSelect,
+			ShowcaseIcon_ToolMove,
+			ShowcaseIcon_ToolRotate,
+		};
+		for (int i = 0; i < 3; i++)
+		{
+			bool selected = i == toolIndex;
+			static char id[10];
+			sprintf_s(id, "tool_%d", i);
+			if (ImGuiCustom::ToolbarButton(id, toolIcons[i], selected) && i != toolIndex)
+			{
+				toolIndex = i;
+			}
+		}
+
+		ImGuiCustom::EndToolbar();
 	}
 }
 
 LRESULT Showcase::OnCreate()
 {
 	LRESULT result = Window::OnCreate();
+
+	ImGuiCustom::LoadResources(this->GetDevice());
 
 	this->_GridMesh = CreateGridWidgetMesh(this->GetDevice());
 
@@ -177,6 +205,8 @@ LRESULT Showcase::OnDestroy()
 {
 	delete this->_GridMesh;
 	this->_GridMesh = nullptr;
+
+	ImGuiCustom::UnloadResources();
 
 	return Window::OnDestroy();
 }
