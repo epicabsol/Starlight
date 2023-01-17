@@ -39,25 +39,9 @@ void Window::SetWrapCursor(bool wrapCursor)
 }
 
 Window::Window(HINSTANCE application, wchar_t* caption, HWND parent, int x, int y, int width, int height)
+	: Window(&HandleCreation<Window>, application, caption, parent, x, y, width, height)
 {
-	// Register the window class if it has not already been registered
-	if (!Window::_WindowClassRegistered)
-	{
-		WNDCLASSW windowClass = { };
-		windowClass.lpfnWndProc = &Window::WindowProc;
-		windowClass.hInstance = application;
-		windowClass.lpszClassName = WINDOW_CLASS;
-		windowClass.hCursor = LoadCursorW(NULL, IDC_ARROW);
-		RegisterClassW(&windowClass);
 
-		Window::_WindowClassRegistered = true;
-	}
-
-	this->_Handle = CreateWindowEx(0, WINDOW_CLASS, caption, WS_OVERLAPPEDWINDOW, x, y, width, height, parent, NULL, application, this);
-
-	SetWindowLongPtrW(this->_Handle, GWLP_USERDATA, (size_t)(void*)this);
-
-	this->Show();
 }
 
 Window::~Window()
@@ -91,14 +75,7 @@ void Window::Update(float deltaTime)
 	this->_Camera.SetPosition(this->_CameraController.GetCameraPosition());
 	this->_Camera.SetRotation(this->_CameraController.GetCameraRotation());
 
-	ImGui::ShowDemoWindow();
-
-	ImGui::Begin("debug");
-	XMFLOAT3 campos;
-	XMStoreFloat3(&campos, this->_Camera.GetPosition());
-	ImGui::InputFloat3("camera pos", &campos.x);
-	this->_Camera.SetPosition(XMLoadFloat3(&campos));
-	ImGui::End();
+	this->OnUpdate(deltaTime);
 
 	ImGui::Render();
 }
@@ -116,10 +93,9 @@ void Window::Render()
 	// Draw scene
 	this->_Pipeline->Draw();
 
-	// Draw widgets
 	ID3D11RenderTargetView* rtv = this->_Pipeline->GetOutputRTV();
 	this->_ImmediateContext->OMSetRenderTargets(1, &rtv, nullptr);
-	this->DrawWidgetMesh(this->_GridMesh, XMMatrixIdentity(), XMVectorSet(1.0f, 1.0f, 1.0f, 0.0f));
+	this->OnDrawWidgets();
 
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 }
@@ -134,6 +110,30 @@ void Window::Present()
 void Window::WaitOnSwapChain()
 {
 	DWORD result = WaitForSingleObjectEx(this->_SwapChainWaitable, 1000, true);
+}
+
+Window::Window(LRESULT(*creationHandler)(Window* window), HINSTANCE application, wchar_t* caption, HWND parent, int x, int y, int width, int height)
+{
+	// Register the window class if it has not already been registered
+	if (!Window::_WindowClassRegistered)
+	{
+		WNDCLASSW windowClass = { };
+		windowClass.lpfnWndProc = &Window::WindowProc;
+		windowClass.hInstance = application;
+		windowClass.lpszClassName = WINDOW_CLASS;
+		windowClass.hCursor = LoadCursorW(NULL, IDC_ARROW);
+		RegisterClassW(&windowClass);
+
+		Window::_WindowClassRegistered = true;
+	}
+
+	this->_WindowCreationHandler = creationHandler;
+
+	this->_Handle = CreateWindowEx(0, WINDOW_CLASS, caption, WS_OVERLAPPEDWINDOW, x, y, width, height, parent, NULL, application, this);
+
+	SetWindowLongPtrW(this->_Handle, GWLP_USERDATA, (size_t)(void*)this);
+
+	this->Show();
 }
 
 // Drawing
@@ -172,6 +172,16 @@ void XM_CALLCONV Window::DrawWidgetMesh(const Mesh* mesh, const DirectX::XMMATRI
 	this->_ImmediateContext->DrawIndexed(mesh->GetIndexCount(), 0, 0);
 }
 
+void Window::OnDrawWidgets()
+{
+
+}
+
+void Window::OnUpdate(float deltaTime)
+{
+
+}
+
 // Window messages
 
 LRESULT Window::OnCreate()
@@ -200,7 +210,7 @@ LRESULT Window::OnCreate()
 
 	DXGI_SWAP_CHAIN_DESC scDesc = { { clientRect.right - clientRect.left, clientRect.bottom - clientRect.top, { 60, 1 }, DXGI_FORMAT_B8G8R8A8_UNORM }, { 1, 0 }, DXGI_USAGE_RENDER_TARGET_OUTPUT, 2, this->_Handle, TRUE, DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT };
 	IDXGISwapChain* swapChain = nullptr;
-	hr = factory->CreateSwapChain(this->_Device, &scDesc, &swapChain); // &this->_SwapChain);
+	hr = factory->CreateSwapChain(this->_Device, &scDesc, &swapChain);
 	swapChain->QueryInterface(&this->_SwapChain);
 	swapChain->Release();
 	this->_SwapChainWaitable = this->_SwapChain->GetFrameLatencyWaitableObject();
@@ -217,7 +227,7 @@ LRESULT Window::OnCreate()
 	this->_Pipeline = new DeferredPipeline(this->_Device, this->_Backbuffer, clientRect.right - clientRect.left, clientRect.bottom - clientRect.top);
 
 	// Load resources
-	this->_GridMesh = CreateGridWidgetMesh(this->_Device);
+	
 	this->_WidgetTechnique = new Technique(this->_Device, WidgetVertexElements, WidgetVertexElementCount,
 		Shaders::WidgetVertexShaderBytes, Shaders::WidgetVertexShaderLength,
 		Shaders::WidgetPixelShaderBytes, Shaders::WidgetPixelShaderLength);
@@ -246,8 +256,6 @@ LRESULT Window::OnDestroy()
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 
-	delete this->_GridMesh;
-	this->_GridMesh = nullptr;
 	delete this->_FrameConstantBuffer;
 	this->_FrameConstantBuffer = nullptr;
 	delete this->_WidgetConstantBuffer;
@@ -448,7 +456,7 @@ LRESULT Window::WindowProc(HWND handle, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			CREATESTRUCT* createStruct = (CREATESTRUCT*)lParam;
 			window = (Window*)createStruct->lpCreateParams;
 			window->_Handle = handle;
-			return window->OnCreate();
+			return window->_WindowCreationHandler(window);
 		}
 		case WM_DESTROY:
 			return window->OnDestroy();

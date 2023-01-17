@@ -39,8 +39,8 @@ file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 string(STRIP "${shader_source_files}" shader_source_files)
 
 add_executable(StarlightShowcase WIN32 "src/Main.cpp" "src/Window.cpp" "src/render/DeferredPipeline.cpp"
-	"src/imgui/imgui.cpp" "src/imgui/imgui_demo.cpp" "src/imgui/imgui_draw.cpp" "src/imgui/imgui_tables.cpp" "src/imgui/imgui_widgets.cpp"
+	"src/imgui/imgui.cpp" "src/imgui/imgui_demo.cpp" "src/imgui/imgui_draw.cpp" "src/imgui/imgui_tables.cpp" "src/imgui/imgui_widgets.cpp" "src/imgui/imgui_custom.cpp"
 	"src/imgui/backend/imgui_impl_win32.cpp" "src/imgui/backend/imgui_impl_dx11.cpp" "src/render/Mesh.cpp" "src/Widget.cpp"
-	"${shader_source_files}" "src/render/Technique.cpp" "src/Camera.cpp" "src/CameraController.cpp")
+	"${shader_source_files}" "src/render/Technique.cpp" "src/Camera.cpp" "src/CameraController.cpp" "src/scene/SceneObject.cpp" "src/Showcase.cpp" "src/scene/Light.cpp" "src/scene/PointLight.cpp")
 target_include_directories(StarlightShowcase PUBLIC "../Starlight/include/" "./include/" "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 target_link_libraries(StarlightShowcase PUBLIC starlight "d3d11" "dxgi")

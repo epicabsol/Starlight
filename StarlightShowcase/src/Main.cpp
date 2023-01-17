@@ -1,11 +1,11 @@
 
-#include "Window.h"
+#include "Showcase.h"
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, wchar_t* pCmdLine, int nCmdShow)
 {
 	SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-	Window* window = new Window(hInstance, L"Starlight Showcase");
+	Window* window = new Showcase(hInstance);
 
 	MSG msg = { };
 

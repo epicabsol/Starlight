@@ -28,16 +28,18 @@ Mesh* CreateGridWidgetMesh(ID3D11Device* device)
 
 	for (int i = 0; i < GRID_SIZE * 2 + 1; i++)
 	{
-		vertices[i * 2] = { XMFLOAT3(i - GRID_SIZE, 0.0f, -GRID_SIZE), color };
-		vertices[i * 2 + 1] = { XMFLOAT3(i - GRID_SIZE, 0.0f, GRID_SIZE), color };
+		XMFLOAT3 lineColor = i == GRID_SIZE ? XMFLOAT3(0.2f, 0.2f, 1.0f) : color;
+		vertices[i * 2] = { XMFLOAT3(i - GRID_SIZE, 0.0f, -GRID_SIZE), lineColor };
+		vertices[i * 2 + 1] = { XMFLOAT3(i - GRID_SIZE, 0.0f, GRID_SIZE), lineColor };
 		indices[i * 2] = i * 2;
 		indices[i * 2 + 1] = i * 2 + 1;
 	}
 
 	for (int i = 0; i < GRID_SIZE * 2 + 1; i++)
 	{
-		vertices[parallelVertexCount + i * 2] = { XMFLOAT3(-GRID_SIZE, 0.0f, i - GRID_SIZE), color };
-		vertices[parallelVertexCount + i * 2 + 1] = { XMFLOAT3(GRID_SIZE, 0.0f, i - GRID_SIZE), color };
+		XMFLOAT3 lineColor = i == GRID_SIZE ? XMFLOAT3(1.0f, 0.2f, 0.2f) : color;
+		vertices[parallelVertexCount + i * 2] = { XMFLOAT3(-GRID_SIZE, 0.0f, i - GRID_SIZE), lineColor };
+		vertices[parallelVertexCount + i * 2 + 1] = { XMFLOAT3(GRID_SIZE, 0.0f, i - GRID_SIZE), lineColor };
 		indices[parallelVertexCount + i * 2] = parallelVertexCount + i * 2;
 		indices[parallelVertexCount + i * 2 + 1] = parallelVertexCount + i * 2 + 1;
 	}

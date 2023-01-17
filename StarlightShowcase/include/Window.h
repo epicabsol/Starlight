@@ -35,6 +35,7 @@ class Window
 private:
 	HWND _Handle;
 	static bool _WindowClassRegistered;
+	LRESULT(*_WindowCreationHandler)(Window*);
 	bool _Visible = false;
 	bool _WrapCursor = false;
 	bool _IsWrappingCursor = false;
@@ -55,17 +56,20 @@ private:
 	Technique* _WidgetTechnique = nullptr;
 	ConstantBuffer<WidgetConstants>* _WidgetConstantBuffer = nullptr;
 	ConstantBuffer<FrameConstants>* _FrameConstantBuffer = nullptr;
-	Mesh* _GridMesh = nullptr;
 
 	void SetWrapCursor(bool wrapCursor);
 
 public:
 	Window(HINSTANCE application, wchar_t* caption, HWND parent = NULL, int x = CW_USEDEFAULT, int y = CW_USEDEFAULT, int width = CW_USEDEFAULT, int height = CW_USEDEFAULT);
-	~Window();
+	virtual ~Window();
 
 	inline bool IsVisible() const { return this->_Visible; }
 	inline ID3D11Device* GetDevice() const { return this->_Device; }
 	inline ID3D11DeviceContext* GetImmediateContext() const { return this->_ImmediateContext; }
+	inline DeferredPipeline* GetPipeline() const { return this->_Pipeline; }
+
+	inline Camera* GetCamera() { return &this->_Camera; }
+	inline CameraController* GetCameraController() { return &this->_CameraController; }
 
 	void Show();
 	void Hide();
@@ -77,17 +81,36 @@ public:
 	void WaitOnSwapChain();
 
 protected:
+	// We can't call overridden functions in our constructor, which is where WM_CREATE is called.
+	// Hence, all this malarkey.
+
+	// Thunk that calls a member function (OnCreate), and that we can pass as a normal function pointer
+	template <typename TWindow>
+	static LRESULT HandleCreation(Window* window)
+	{
+		TWindow* tWindow = (TWindow*)window;
+		return tWindow->OnCreate();
+	}
+
+	Window(LRESULT(*creationHandler)(Window* window), HINSTANCE application, wchar_t* caption, HWND parent = NULL, int x = CW_USEDEFAULT, int y = CW_USEDEFAULT, int width = CW_USEDEFAULT, int height = CW_USEDEFAULT);
+	
+protected:
+
 	void XM_CALLCONV DrawWidgetMesh(const Mesh* mesh, const DirectX::XMMATRIX transform, const DirectX::XMVECTOR colorOverride);
 
-	LRESULT OnCreate();
-	LRESULT OnDestroy();
-	LRESULT OnPaint();
-	LRESULT OnResize(int resizeType, unsigned int clientWidth, unsigned int clientHeight);
-	LRESULT OnKeyDown(int virtualKey);
-	LRESULT OnKeyUp(int virtualKey);
-	LRESULT OnMouseDown(int button, int x, int y);
-	LRESULT OnMouseUp(int button, int x, int y);
-	LRESULT OnMouseMove(int x, int y);
+	virtual void OnDrawWidgets();
+	virtual void OnUpdate(float deltaTime);
+
+	// OnCreate can't be virtual, as it is called from within the constructor
+	/*virtual*/ LRESULT OnCreate();
+	virtual LRESULT OnDestroy();
+	virtual LRESULT OnPaint();
+	virtual LRESULT OnResize(int resizeType, unsigned int clientWidth, unsigned int clientHeight);
+	virtual LRESULT OnKeyDown(int virtualKey);
+	virtual LRESULT OnKeyUp(int virtualKey);
+	virtual LRESULT OnMouseDown(int button, int x, int y);
+	virtual LRESULT OnMouseUp(int button, int x, int y);
+	virtual LRESULT OnMouseMove(int x, int y);
 
 private:
 	static LRESULT CALLBACK WindowProc(HWND handle, UINT uMsg, WPARAM wParam, LPARAM lParam);
