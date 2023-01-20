@@ -94,7 +94,7 @@ void Showcase::OnUpdate(float timeStep)
 	ImGui::PopStyleVar(1);
 
 	// Properties
-	const float propertiesWidth = 300.0f;
+	float propertiesWidth = 300.0f * ImGui::GetIO().FontGlobalScale;
 	float workspaceHeight = ImGui::GetMainViewport()->WorkSize.y;
 	if (this->_PropertiesPaneVisible)
 	{
