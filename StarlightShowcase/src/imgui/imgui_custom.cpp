@@ -105,7 +105,7 @@ namespace ImGuiCustom
 
 	bool ToolbarButton(const char* name, ShowcaseIcon icon, bool active)
 	{
-		ImVec2 imageSize = ImVec2(TOOLBAR_WIDTH - TOOLBAR_PADDING, TOOLBAR_WIDTH - TOOLBAR_PADDING);
+		ImVec2 imageSize = ImVec2((TOOLBAR_WIDTH - TOOLBAR_PADDING) * ImGui::GetIO().FontGlobalScale, (TOOLBAR_WIDTH - TOOLBAR_PADDING) * ImGui::GetIO().FontGlobalScale);
 
 		bool clicked;
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(TOOLBAR_PADDING, TOOLBAR_PADDING));
