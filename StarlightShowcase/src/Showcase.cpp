@@ -6,12 +6,24 @@
 #include "imgui/imgui.h"
 #include "imgui/imgui_custom.h"
 
+#include "tools/SelectTool.h"
+#include "tools/MoveTool.h"
+#include "tools/RotateTool.h"
+
 #include "ShowcaseResources.h"
 
 using namespace DirectX;
 
-Showcase::Showcase(HINSTANCE hInstance) : Window(&Window::HandleCreation<Showcase>, hInstance, L"Starlight Showcase")
+Showcase::Showcase(HINSTANCE hInstance) : Window(&Window::HandleCreation<Showcase>, hInstance, L"Starlight Showcase"), _PointLights(), _ActiveTool(nullptr)
 {
+	this->_SelectTool = new SelectTool(this);
+	this->_Tools.push_back(this->_SelectTool);
+	this->SetActiveTool(this->_SelectTool);
+	this->_MoveTool = new MoveTool(this);
+	this->_Tools.push_back(this->_MoveTool);
+	this->_RotateTool = new RotateTool(this);
+	this->_Tools.push_back(this->_RotateTool);
+	
 	this->_PointLights.push_back(new PointLight());
 	this->SetSelectedObject(this->_PointLights[0]);
 }
@@ -34,9 +46,32 @@ void Showcase::SetSelectedObject(SceneObject* selectedObject)
 	}
 }
 
+void Showcase::SetActiveTool(Tool* tool)
+{
+	if (tool != this->_ActiveTool)
+	{
+		if (this->_ActiveTool != nullptr)
+		{
+			this->_ActiveTool->Deactivate();
+		}
+
+		this->_ActiveTool = tool;
+
+		if (tool != nullptr)
+		{
+			tool->Activate();
+		}
+	}
+}
+
 void Showcase::OnDrawWidgets()
 {
 	this->DrawWidgetMesh(this->_GridMesh, DirectX::XMMatrixIdentity(), DirectX::XMVectorSet(1.0f, 1.0f, 1.0f, 0.0f));
+
+	if (this->_ActiveTool != nullptr)
+	{
+		this->_ActiveTool->DrawWidgets();
+	}
 }
 
 void Showcase::OnUpdate(float timeStep)
@@ -92,6 +127,17 @@ void Showcase::OnUpdate(float timeStep)
 	}
 #endif
 	ImGui::PopStyleVar(1);
+
+	// Status bar
+	if (ImGuiCustom::BeginStatusBar())
+	{
+		if (this->_ActiveTool != nullptr)
+		{
+			this->_ActiveTool->DrawStatus();
+		}
+
+		ImGuiCustom::EndStatusBar();
+	}
 
 	// Properties
 	const float propertiesWidth = 300.0f;
@@ -164,30 +210,26 @@ void Showcase::OnUpdate(float timeStep)
 		ImGui::End();
 		ImGui::PopStyleVar(2);
 
-		// Toolbar
-		const float toolbarMargin = 4.0f;
-		ImGuiCustom::BeginToolbar("Toolbar", propertiesWidth + toolbarMargin, ImGui::GetMainViewport()->WorkPos.y + toolbarMargin);
-
-		static int toolIndex = 0;
-		static ShowcaseIcon toolIcons[] =
-		{
-			ShowcaseIcon_ToolSelect,
-			ShowcaseIcon_ToolMove,
-			ShowcaseIcon_ToolRotate,
-		};
-		for (int i = 0; i < 3; i++)
-		{
-			bool selected = i == toolIndex;
-			static char id[10];
-			sprintf_s(id, "tool_%d", i);
-			if (ImGuiCustom::ToolbarButton(id, toolIcons[i], selected) && i != toolIndex)
-			{
-				toolIndex = i;
-			}
-		}
-
-		ImGuiCustom::EndToolbar();
 	}
+
+	// Toolbar
+	const float toolbarMargin = 4.0f;
+	ImGuiCustom::BeginToolbar("Toolbar", (this->_ObjectsPaneVisible ? propertiesWidth : 0.0f) + toolbarMargin, ImGui::GetMainViewport()->WorkPos.y + toolbarMargin);
+
+	for (int i = 0; i < this->_Tools.size(); i++)
+	{
+		Tool* tool = this->_Tools[i];
+		if (ImGuiCustom::ToolbarButton(tool->GetID(), tool->GetIcon(), tool == this->_ActiveTool))
+		{
+			this->_ActiveTool = tool;
+		}
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+		{
+			ImGuiCustom::SetTooltip(tool->GetTooltip());
+		}
+	}
+
+	ImGuiCustom::EndToolbar();
 }
 
 LRESULT Showcase::OnCreate()
@@ -203,6 +245,14 @@ LRESULT Showcase::OnCreate()
 
 LRESULT Showcase::OnDestroy()
 {
+	this->_Tools.clear();
+	delete this->_SelectTool;
+	this->_SelectTool = nullptr;
+	delete this->_MoveTool;
+	this->_MoveTool = nullptr;
+	delete this->_RotateTool;
+	this->_RotateTool = nullptr;
+
 	delete this->_GridMesh;
 	this->_GridMesh = nullptr;
 

@@ -65,6 +65,42 @@ void Window::Close()
 	CloseWindow(this->_Handle);
 }
 
+// Drawing
+
+void XM_CALLCONV Window::DrawWidgetMesh(const Mesh* mesh, const DirectX::XMMATRIX transform, const DirectX::XMVECTOR colorOverride)
+{
+	WidgetConstants widget;
+	XMStoreFloat4x4(&widget.TransformMatrix, XMMatrixTranspose(transform));
+	XMStoreFloat4(&widget.ColorOverride, colorOverride);
+	this->_WidgetConstantBuffer->Update(this->_ImmediateContext, widget);
+
+	this->_ImmediateContext->IASetInputLayout(this->_WidgetTechnique->GetInputLayout());
+	this->_ImmediateContext->IASetPrimitiveTopology(mesh->GetTopology());
+	ID3D11Buffer* vertexBuffers[] =
+	{
+		mesh->GetVertexBuffer()
+	};
+	UINT strides[] =
+	{
+		sizeof(WidgetVertex),
+	};
+	UINT offsets[] =
+	{
+		0,
+	};
+	this->_ImmediateContext->IASetVertexBuffers(0, sizeof(vertexBuffers) / sizeof(vertexBuffers[0]), vertexBuffers, strides, offsets);
+	this->_ImmediateContext->IASetIndexBuffer(mesh->GetIndexBuffer(), mesh->GetIndexFormat(), 0);
+	this->_ImmediateContext->VSSetShader(this->_WidgetTechnique->GetVertexShader(), nullptr, 0);
+	ID3D11Buffer* constantBuffers[] =
+	{
+		this->_FrameConstantBuffer->GetBuffer(),
+		this->_WidgetConstantBuffer->GetBuffer(),
+	};
+	this->_ImmediateContext->VSSetConstantBuffers(0, sizeof(constantBuffers) / sizeof(constantBuffers[0]), constantBuffers);
+	this->_ImmediateContext->PSSetShader(this->_WidgetTechnique->GetPixelShader(), nullptr, 0);
+	this->_ImmediateContext->DrawIndexed(mesh->GetIndexCount(), 0, 0);
+}
+
 void Window::Update(float deltaTime)
 {
 	ImGui_ImplWin32_NewFrame();
@@ -134,42 +170,6 @@ Window::Window(LRESULT(*creationHandler)(Window* window), HINSTANCE application,
 	SetWindowLongPtrW(this->_Handle, GWLP_USERDATA, (size_t)(void*)this);
 
 	this->Show();
-}
-
-// Drawing
-
-void XM_CALLCONV Window::DrawWidgetMesh(const Mesh* mesh, const DirectX::XMMATRIX transform, const DirectX::XMVECTOR colorOverride)
-{
-	WidgetConstants widget;
-	XMStoreFloat4x4(&widget.TransformMatrix, transform);
-	XMStoreFloat4(&widget.ColorOverride, colorOverride);
-	this->_WidgetConstantBuffer->Update(this->_ImmediateContext, widget);
-
-	this->_ImmediateContext->IASetInputLayout(this->_WidgetTechnique->GetInputLayout());
-	this->_ImmediateContext->IASetPrimitiveTopology(mesh->GetTopology());
-	ID3D11Buffer* vertexBuffers[] =
-	{
-		mesh->GetVertexBuffer()
-	};
-	UINT strides[] =
-	{
-		sizeof(WidgetVertex),
-	};
-	UINT offsets[] =
-	{
-		0,
-	};
-	this->_ImmediateContext->IASetVertexBuffers(0, sizeof(vertexBuffers) / sizeof(vertexBuffers[0]), vertexBuffers, strides, offsets);
-	this->_ImmediateContext->IASetIndexBuffer(mesh->GetIndexBuffer(), mesh->GetIndexFormat(), 0);
-	this->_ImmediateContext->VSSetShader(this->_WidgetTechnique->GetVertexShader(), nullptr, 0);
-	ID3D11Buffer* constantBuffers[] =
-	{
-		this->_FrameConstantBuffer->GetBuffer(),
-		this->_WidgetConstantBuffer->GetBuffer(),
-	};
-	this->_ImmediateContext->VSSetConstantBuffers(0, sizeof(constantBuffers) / sizeof(constantBuffers[0]), constantBuffers);
-	this->_ImmediateContext->PSSetShader(this->_WidgetTechnique->GetPixelShader(), nullptr, 0);
-	this->_ImmediateContext->DrawIndexed(mesh->GetIndexCount(), 0, 0);
 }
 
 void Window::OnDrawWidgets()

@@ -75,6 +75,8 @@ public:
 	void Hide();
 	void Close();
 
+	void XM_CALLCONV DrawWidgetMesh(const Mesh* mesh, const DirectX::XMMATRIX transform, const DirectX::XMVECTOR colorOverride);
+
 	void Update(float deltaTime);
 	void Render();
 	void Present();
@@ -95,8 +97,6 @@ protected:
 	Window(LRESULT(*creationHandler)(Window* window), HINSTANCE application, wchar_t* caption, HWND parent = NULL, int x = CW_USEDEFAULT, int y = CW_USEDEFAULT, int width = CW_USEDEFAULT, int height = CW_USEDEFAULT);
 	
 protected:
-
-	void XM_CALLCONV DrawWidgetMesh(const Mesh* mesh, const DirectX::XMMATRIX transform, const DirectX::XMVECTOR colorOverride);
 
 	virtual void OnDrawWidgets();
 	virtual void OnUpdate(float deltaTime);

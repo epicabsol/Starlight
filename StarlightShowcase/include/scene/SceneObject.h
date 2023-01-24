@@ -9,7 +9,7 @@ class SceneObject
 {
 private:
 	DirectX::XMFLOAT3 _Position;
-	DirectX::XMFLOAT4 _Rotation;
+	DirectX::XMFLOAT4 _Rotation = DirectX::XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
 
 	bool _IsSelected = false;
 

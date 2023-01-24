@@ -117,4 +117,24 @@ namespace ImGuiCustom
 
 		return clicked && !active;
 	}
+
+	void SetTooltip(const char* tooltip)
+	{
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f, 4.0f));
+		ImGui::SetTooltip(tooltip);
+		ImGui::PopStyleVar();
+	}
+
+	bool BeginStatusBar()
+	{
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 2.0f));
+		bool result = ImGui::BeginViewportSideBar("##MainStatusBar", ImGui::GetMainViewport(), ImGuiDir_Down, ImGui::GetFrameHeight(), ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings);
+		return result;
+	}
+
+	void EndStatusBar()
+	{
+		ImGui::End();
+		ImGui::PopStyleVar();
+	}
 }

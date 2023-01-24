@@ -7,6 +7,10 @@
 class Mesh;
 class SceneObject;
 class PointLight;
+class Tool;
+class SelectTool;
+class MoveTool;
+class RotateTool;
 
 class Showcase : public Window
 {
@@ -17,6 +21,12 @@ private:
 	std::vector<PointLight*> _PointLights;
 	SceneObject* _SelectedObject = nullptr;
 
+	std::vector<Tool*> _Tools;
+	Tool* _ActiveTool;
+	SelectTool* _SelectTool;
+	MoveTool* _MoveTool;
+	RotateTool* _RotateTool;
+
 	bool _ObjectsPaneVisible = true;
 	bool _PropertiesPaneVisible = true;
 
@@ -25,6 +35,7 @@ public:
 
 	inline SceneObject* GetSelectedObject() const { return this->_SelectedObject; }
 	void SetSelectedObject(SceneObject* selectedObject);
+	void SetActiveTool(Tool* tool);
 
 protected:
 	virtual void OnDrawWidgets() override;

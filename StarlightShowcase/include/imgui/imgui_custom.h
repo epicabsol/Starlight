@@ -5,7 +5,6 @@
 /**
  * Dear Imgui custom routines
  */
-
 namespace ImGuiCustom
 {
 	void LoadResources(struct ::ID3D11Device* device);
@@ -27,4 +26,13 @@ namespace ImGuiCustom
 	void EndToolbar();
 
 	bool ToolbarButton(const char* name, ShowcaseIcon icon, bool active = false);
+
+	// Tooltips
+
+	void SetTooltip(const char* tooltip);
+
+	// Status bar
+
+	bool BeginStatusBar();
+	void EndStatusBar();
 }
