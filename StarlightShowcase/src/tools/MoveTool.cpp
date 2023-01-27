@@ -30,7 +30,7 @@ MoveAxisInfo MoveAxes[] =
 	{ MoveTool::MoveToolWidget::AxisZ, XMFLOAT3(0.0f, 0.0f, 1.0f), XMFLOAT3(0.2f, 0.2f, 1.0f) },
 };
 
-void XM_CALLCONV MoveTool::DrawAxis(const XMVECTOR position, const XMVECTOR direction, const DirectX::XMFLOAT4& tint) const
+void XM_CALLCONV MoveTool::DrawAxis(const XMVECTOR position, const XMVECTOR direction, const DirectX::XMVECTOR tint) const
 {
 	float dot = XMVectorGetX(XMVector3Dot(direction, XMVector3Normalize(XMVectorSubtract(this->GetShowcase()->GetCameraController()->GetCameraPosition(), position))));
 	if (dot > -0.99f && dot < 0.99f)
@@ -38,8 +38,8 @@ void XM_CALLCONV MoveTool::DrawAxis(const XMVECTOR position, const XMVECTOR dire
 		float scale = ARROW_SCALE * this->GetWidgetScale(position);
 		XMMATRIX rotation = XMVectorGetY(direction) > 0.999f ? XMMatrixRotationX(-3.14159265f / 2.0f) : XMMatrixLookToLH(XMVectorZero(), XMVectorMultiply(direction, XMVectorSet(-1.0f, 1.0f, 1.0f, 1.0f)), XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
 		XMMATRIX transform = XMMatrixMultiply(XMMatrixScaling(scale, scale, scale), XMMatrixMultiply(rotation, XMMatrixTranslationFromVector(position)));
-		this->GetShowcase()->DrawWidgetMesh(this->_ArrowLineMesh, transform, XMLoadFloat4(&tint));
-		this->GetShowcase()->DrawWidgetMesh(this->_ArrowheadMesh, XMMatrixMultiply(XMMatrixMultiply(XMMatrixScaling(ARROWHEAD_SIZE, ARROWHEAD_SIZE, ARROWHEAD_SIZE), XMMatrixTranslation(0.0f, 0.0f, ARROW_STEM_LENGTH)), transform), XMLoadFloat4(&tint));
+		this->GetShowcase()->DrawWidgetMesh(this->_ArrowLineMesh, transform, tint);
+		this->GetShowcase()->DrawWidgetMesh(this->_ArrowheadMesh, XMMatrixMultiply(XMMatrixMultiply(XMMatrixScaling(ARROWHEAD_SIZE, ARROWHEAD_SIZE, ARROWHEAD_SIZE), XMMatrixTranslation(0.0f, 0.0f, ARROW_STEM_LENGTH)), transform), tint);
 	}
 }
 
@@ -64,7 +64,7 @@ MoveTool::MoveToolWidget MoveTool::HitTestWidgets(int x, int y, XMVECTOR& hitPoi
 		for (size_t i = 0; i < sizeof(MoveAxes) / sizeof(MoveAxes[0]); i++)
 		{
 			float distance;
-			if (this->HitTestAxis(selectedObject->GetPosition(), XMLoadFloat3(&MoveAxes[i].Direction), rayOrigin, rayDirection, distance))
+			if (this->HitTestAxis(selectedObject->GetPosition(), XMVector3Rotate(XMLoadFloat3(&MoveAxes[i].Direction), selectedObject->GetRotation()), rayOrigin, rayDirection, distance))
 			{
 				if (distance < minDistance)
 				{
@@ -91,6 +91,44 @@ MoveTool::MoveToolWidget MoveTool::HitTestWidgets(int x, int y, XMVECTOR& hitPoi
 	{
 		hitPoint = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
 		return MoveToolWidget::None;
+	}
+}
+
+DirectX::XMVECTOR XM_CALLCONV MoveTool::SnapToWidget(int x, int y, MoveToolWidget widget) const
+{
+	SceneObject* selectedObject = this->GetShowcase()->GetSelectedObject();
+	if (selectedObject != nullptr)
+	{
+		XMVECTOR rayOrigin;
+		XMVECTOR rayDirection;
+		this->GetScreenRay(x, y, rayOrigin, rayDirection);
+		if (widget >= MoveToolWidget::AxisX && widget <= MoveToolWidget::AxisZ)
+		{
+			// Axis widget
+			// Project cursor position onto camera-facing plane and then onto axis
+		
+			XMVECTOR pointOnPlane = XMPlaneIntersectLine(XMPlaneFromPointNormal(selectedObject->GetPosition(), this->GetShowcase()->GetCameraController()->GetForwardVector()), rayOrigin, XMVectorAdd(rayOrigin, rayDirection));
+			MoveAxisInfo* axisInfo = &MoveAxes[(int)widget - (int)MoveToolWidget::AxisX];
+			return ProjectPointOntoAxis(pointOnPlane, selectedObject->GetPosition(), XMVector3Rotate(XMLoadFloat3(&axisInfo->Direction), selectedObject->GetRotation()));
+		}
+		else if (widget >= MoveToolWidget::PlaneXY && widget <= MoveToolWidget::PlaneXZ)
+		{
+			// Plane widget
+			// Project cursor position onto plane
+
+			// TODO: Implement!
+			return XMVectorZero();
+		}
+		else
+		{
+			// Nobody should be passing in MoveToolWidget::None
+			return XMVectorZero();
+		}
+	}
+	else
+	{
+		// Widgets don't exist while nothing is selected
+		return XMVectorZero();
 	}
 }
 
@@ -125,7 +163,11 @@ void MoveTool::DrawWidgets()
 	{
 		for (size_t i = 0; i < sizeof(MoveAxes) / sizeof(MoveAxes[0]); i++)
 		{
-			XMFLOAT4 color = (MoveAxes[i].Widget == this->_ActiveWidget) ? XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f) : XMFLOAT4(MoveAxes[i].Color.x, MoveAxes[i].Color.y, MoveAxes[i].Color.z, 1.0f);
+			XMVECTOR color = XMVectorSetW(XMLoadFloat3(&MoveAxes[i].Color), 1.0f);
+			if (this->_ActiveWidget == MoveAxes[i].Widget)
+			{
+				color = XMVectorLerp(color, XMVectorSet(1.0f, 1.0f, 1.0f, 1.0f), this->_IsDraggingWidget ? 1.0f : 0.55f);
+			}
 			this->DrawAxis(showcase->GetSelectedObject()->GetPosition(), XMVector3Rotate(XMLoadFloat3(&MoveAxes[i].Direction), showcase->GetSelectedObject()->GetRotation()), color);
 		}
 	}
@@ -133,16 +175,50 @@ void MoveTool::DrawWidgets()
 
 void MoveTool::OnMouseDown(int button, int x, int y)
 {
-	// TODO: Implement!
+	SceneObject* selectedObject = this->GetShowcase()->GetSelectedObject();
+	if (selectedObject != nullptr)
+	{
+		XMVECTOR hitPoint;
+
+		if (button == MOUSE_BUTTON_LEFT)
+		{
+			this->_ActiveWidget = this->HitTestWidgets(x, y, hitPoint);
+			if (this->_ActiveWidget != MoveToolWidget::None)
+			{
+				// Begin the drag
+				this->_IsDraggingWidget = true;
+				XMStoreFloat3(&this->_DragInitialPosition, selectedObject->GetPosition());
+				XMStoreFloat3(&this->_DragInitialCursor, this->SnapToWidget(x, y, this->_ActiveWidget));
+			}
+		}
+	}
+
 }
 
 void MoveTool::OnMouseUp(int button, int x, int y)
 {
-	// TODO: Implement!
+	if (button == MOUSE_BUTTON_LEFT && this->_IsDraggingWidget)
+	{
+		this->_IsDraggingWidget = false;
+	}
 }
 
 void MoveTool::OnMouseMove(int x, int y)
 {
 	XMVECTOR hitPoint;
-	this->_ActiveWidget = this->HitTestWidgets(x, y, hitPoint);
+
+	if (!this->_IsDraggingWidget)
+	{
+		this->_ActiveWidget = this->HitTestWidgets(x, y, hitPoint);
+	}
+	else
+	{
+		SceneObject* selectedObject = this->GetShowcase()->GetSelectedObject();
+		if (selectedObject != nullptr)
+		{
+			// Update object transform
+			XMVECTOR delta = XMVectorSubtract(this->SnapToWidget(x, y, this->_ActiveWidget), XMLoadFloat3(&this->_DragInitialCursor));
+			selectedObject->SetPosition(XMVectorAdd(XMLoadFloat3(&this->_DragInitialPosition), delta));
+		}
+	}
 }

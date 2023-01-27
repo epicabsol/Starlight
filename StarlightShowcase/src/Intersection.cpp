@@ -6,7 +6,7 @@ using namespace DirectX;
  * Intersection implementations ported from https://iquilezles.org/articles/intersectors/
  */
 
-bool XM_CALLCONV IntersectRayCapsule(const DirectX::XMVECTOR rayOrigin, const DirectX::XMVECTOR rayDirection, const DirectX::XMVECTOR capsuleStart, const DirectX::XMVECTOR capsuleEnd, float radius, float& t)
+bool XM_CALLCONV IntersectRayCapsule(const XMVECTOR rayOrigin, const XMVECTOR rayDirection, const XMVECTOR capsuleStart, const XMVECTOR capsuleEnd, float radius, float& t)
 {
 	XMVECTOR ba = XMVectorSubtract(capsuleEnd, capsuleStart);
 	XMVECTOR oa = XMVectorSubtract(rayOrigin, capsuleStart);
@@ -52,4 +52,11 @@ bool XM_CALLCONV IntersectRayCapsule(const DirectX::XMVECTOR rayOrigin, const Di
 		t = -1.0f;
 		return false;
 	}
+}
+
+XMVECTOR XM_CALLCONV ProjectPointOntoAxis(const XMVECTOR point, const XMVECTOR axisOrigin, const XMVECTOR axisDirection)
+{
+	XMVECTOR toPoint = XMVectorSubtract(point, axisOrigin);
+	
+	return XMVectorAdd(axisOrigin, XMVectorScale(axisDirection, XMVectorGetX(XMVectorDivide(XMVector3Dot(toPoint, axisDirection), XMVector3Dot(axisDirection, axisDirection)))));
 }
