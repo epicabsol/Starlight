@@ -337,7 +337,7 @@ LRESULT Window::OnKeyDown(int virtualKey)
 		return 0;
 	}
 
-	return 0;
+	return 1;
 }
 
 LRESULT Window::OnKeyUp(int virtualKey)
@@ -347,7 +347,7 @@ LRESULT Window::OnKeyUp(int virtualKey)
 		return 0;
 	}
 
-	return 0;
+	return 1;
 }
 
 LRESULT Window::OnMouseDown(int button, int x, int y)
@@ -362,7 +362,7 @@ LRESULT Window::OnMouseDown(int button, int x, int y)
 		return 0;
 	}
 
-	return 0;
+	return 1;
 }
 
 LRESULT Window::OnMouseUp(int button, int x, int y)
@@ -375,7 +375,7 @@ LRESULT Window::OnMouseUp(int button, int x, int y)
 		return 0;
 	}
 
-	return 0;
+	return 1;
 }
 
 LRESULT Window::OnMouseMove(int x, int y)
@@ -423,13 +423,16 @@ LRESULT Window::OnMouseMove(int x, int y)
 
 	float relativeX = (float)x - this->_LastCursorPosition.x;
 	float relativeY = (float)y - this->_LastCursorPosition.y;
-	if (this->_CameraController.MouseMove(relativeX, relativeY))
-	{
-		
-	}
 
 	this->_LastCursorPosition.x = x;
 	this->_LastCursorPosition.y = y;
+
+	if (this->_CameraController.MouseMove(relativeX, relativeY))
+	{
+		return 0;
+	}
+
+	return 1;
 }
 
 // Window procedure

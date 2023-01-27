@@ -14,12 +14,14 @@ private:
 	float _MaxDepth;
 
 	mutable DirectX::XMFLOAT4X4 _ViewMatrix = DirectX::XMFLOAT4X4();
+	mutable DirectX::XMFLOAT4X4 _InverseViewMatrix = DirectX::XMFLOAT4X4();
 	mutable DirectX::XMFLOAT4X4 _ProjectionMatrix = DirectX::XMFLOAT4X4();
+	mutable DirectX::XMFLOAT4X4 _InverseProjectionMatrix = DirectX::XMFLOAT4X4();
 	mutable bool _ViewMatrixStale = true;
 	mutable bool _ProjectionMatrixStale = true;
 
 	DirectX::XMMATRIX XM_CALLCONV RecalculateViewMatrix() const;
-	DirectX::XMMATRIX XM_CALLCONV ReclaculateProjectionMatrix() const;
+	DirectX::XMMATRIX XM_CALLCONV RecalculateProjectionMatrix() const;
 
 public:
 	Camera(float aspectRatio = 1.0f, float verticalFOV = 1.0f, float minDepth = 0.25f, float maxDepth = 1000.0f);
@@ -46,15 +48,33 @@ public:
 		}
 	}
 
+	inline DirectX::XMMATRIX XM_CALLCONV GetInverseViewMatrix() const
+	{
+		if (this->_ViewMatrixStale)
+		{
+			this->RecalculateViewMatrix();
+		}
+		return DirectX::XMLoadFloat4x4(&this->_InverseViewMatrix);
+	}
+
 	inline DirectX::XMMATRIX XM_CALLCONV GetProjectionMatrix() const
 	{
 		if (this->_ProjectionMatrixStale)
 		{
-			return this->ReclaculateProjectionMatrix();
+			return this->RecalculateProjectionMatrix();
 		}
 		else
 		{
 			return DirectX::XMLoadFloat4x4(&this->_ProjectionMatrix);
 		}
+	}
+
+	inline DirectX::XMMATRIX XM_CALLCONV GetInverseProjectionMatrix() const
+	{
+		if (this->_ProjectionMatrixStale)
+		{
+			this->RecalculateProjectionMatrix();
+		}
+		return XMLoadFloat4x4(&this->_InverseProjectionMatrix);
 	}
 };

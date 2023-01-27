@@ -24,6 +24,8 @@ public:
 	~DeferredPipeline();
 
 	inline ID3D11RenderTargetView* GetOutputRTV() const { return this->_OutputRTV; }
+	inline size_t GetWidth() const { return this->_Width; }
+	inline size_t GetHeight() const { return this->_Height; }
 
 	void ReleaseBuffers();
 	void RecreateBuffers(ID3D11Texture2D* outputTexture, size_t width, size_t height);

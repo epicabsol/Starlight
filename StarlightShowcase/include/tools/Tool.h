@@ -1,6 +1,10 @@
 #pragma once
 
 #include "ShowcaseResources.h"
+#include "Showcase.h"
+#include "Camera.h"
+
+#include "DirectXMath.h"
 
 class Showcase;
 
@@ -17,6 +21,8 @@ protected:
 	virtual ~Tool();
 
 	inline Showcase* GetShowcase() const { return this->_Showcase; }
+	void XM_CALLCONV GetScreenRay(int x, int y, DirectX::XMVECTOR& rayOrigin, DirectX::XMVECTOR& rayDirection) const;
+	inline float XM_CALLCONV GetWidgetScale(const DirectX::XMVECTOR widgetOrigin) const { return DirectX::XMVectorGetZ(DirectX::XMVector3TransformCoord(widgetOrigin, this->GetShowcase()->GetCamera()->GetViewMatrix())); }
 
 public:
 	inline const char* GetID() const { return this->_ID; }

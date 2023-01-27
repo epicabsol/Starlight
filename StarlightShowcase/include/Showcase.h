@@ -44,5 +44,9 @@ protected:
 	LRESULT OnCreate();
 	virtual LRESULT OnDestroy() override;
 
+	virtual LRESULT OnMouseDown(int button, int x, int y) override;
+	virtual LRESULT OnMouseUp(int button, int x, int y) override;
+	virtual LRESULT OnMouseMove(int x, int y) override;
+
 	friend class Window;
 };

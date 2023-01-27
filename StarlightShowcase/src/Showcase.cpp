@@ -260,3 +260,36 @@ LRESULT Showcase::OnDestroy()
 
 	return Window::OnDestroy();
 }
+
+LRESULT Showcase::OnMouseDown(int button, int x, int y)
+{
+	LRESULT result = Window::OnMouseDown(button, x, y);
+	if (result != 0)
+	{
+		this->_ActiveTool->OnMouseDown(button, x, y);
+		result = 0;
+	}
+	return result;
+}
+
+LRESULT Showcase::OnMouseUp(int button, int x, int y)
+{
+	LRESULT result = Window::OnMouseUp(button, x, y);
+	if (result != 0)
+	{
+		this->_ActiveTool->OnMouseUp(button, x, y);
+		result = 0;
+	}
+	return result;
+}
+
+LRESULT Showcase::OnMouseMove(int x, int y)
+{
+	LRESULT result = Window::OnMouseMove(x, y);
+	if (result != 0)
+	{
+		this->_ActiveTool->OnMouseMove(x, y);
+		result = 0;
+	}
+	return result;
+}
