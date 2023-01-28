@@ -116,3 +116,35 @@ Mesh* CreateCircleWidgetMesh(ID3D11Device* device, float radius, const DirectX::
 
 	return result;
 }
+
+Mesh* CreateDiscWidgetMesh(ID3D11Device* device, float radius, float thickness, const DirectX::XMFLOAT3& color)
+{
+	const int divisions = 32;
+	WidgetVertex vertices[divisions * 2];
+	const int indicesPerSide = (divisions + 1) * 2;
+	uint16_t indices[indicesPerSide * 2];
+
+	for (int i = 0; i < divisions; i++)
+	{
+		float angle = ((float)i / divisions) * 3.14159265f * 2.0f;
+		vertices[i * 2].Position = XMFLOAT3(cos(angle) * (radius + thickness * 0.5f), sin(angle) * (radius + thickness * 0.5f), 0.0f);
+		vertices[i * 2].Color = color;
+		vertices[i * 2 + 1].Position = XMFLOAT3(cos(angle) * (radius - thickness * 0.5f), sin(angle) * (radius - thickness * 0.5f), 0.0f);
+		vertices[i * 2 + 1].Color = color;
+
+		indices[i * 2] = i * 2;
+		indices[i * 2 + 1] = i * 2 + 1;
+
+		indices[indicesPerSide + i * 2] = indicesPerSide - 4 - i * 2;
+		indices[indicesPerSide + i * 2 + 1] = indicesPerSide - 4 - i * 2 + 1;
+	}
+
+	indices[divisions * 2] = 0;
+	indices[divisions * 2 + 1] = 1;
+	indices[indicesPerSide * 2 - 2] = 0;
+	indices[indicesPerSide * 2 - 1] = 0;
+
+	Mesh* result = new Mesh(device, vertices, sizeof(WidgetVertex), sizeof(vertices) / sizeof(vertices[0]), indices, sizeof(indices) / sizeof(indices[0]), DXGI_FORMAT_R16_UINT, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+
+	return result;
+}

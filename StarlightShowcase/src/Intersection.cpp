@@ -54,6 +54,22 @@ bool XM_CALLCONV IntersectRayCapsule(const XMVECTOR rayOrigin, const XMVECTOR ra
 	}
 }
 
+bool XM_CALLCONV IntersectRayDisc(const XMVECTOR rayOrigin, const XMVECTOR rayDirection, const DirectX::XMVECTOR position, const DirectX::XMVECTOR normal, float radius, float thickness, float& t)
+{
+	XMVECTOR pointOnPlane = XMPlaneIntersectLine(XMPlaneFromPointNormal(position, normal), rayOrigin, XMVectorAdd(rayOrigin, rayDirection));
+	float distanceFromRing = fabs(XMVectorGetX(XMVector3Length(XMVectorSubtract(pointOnPlane, position))) - radius);
+	if (distanceFromRing <= thickness)
+	{
+		t = XMVectorGetX(XMVectorDivide(XMVector3Length(XMVectorSubtract(pointOnPlane, rayOrigin)), XMVector3Length(rayDirection)));
+		return true;
+	}
+	else
+	{
+		t = -1.0f;
+		return false;
+	}
+}
+
 XMVECTOR XM_CALLCONV ProjectPointOntoAxis(const XMVECTOR point, const XMVECTOR axisOrigin, const XMVECTOR axisDirection)
 {
 	XMVECTOR toPoint = XMVectorSubtract(point, axisOrigin);

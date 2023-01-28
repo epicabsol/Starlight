@@ -43,3 +43,8 @@ Mesh* CreateLineWidgetMesh(ID3D11Device* device, const DirectX::XMFLOAT3& start,
  * Creates a widget mesh in the shape of a circle around the Z axis.
  */
 Mesh* CreateCircleWidgetMesh(ID3D11Device* device, float radius, const DirectX::XMFLOAT3& color);
+
+/**
+ * Creates a two-sided widget mesh in the shape of a disc around the Z axis.
+ */
+Mesh* CreateDiscWidgetMesh(ID3D11Device* device, float radius, float thickness, const DirectX::XMFLOAT3& color);

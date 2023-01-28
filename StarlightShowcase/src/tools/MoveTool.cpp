@@ -36,7 +36,8 @@ void XM_CALLCONV MoveTool::DrawAxis(const XMVECTOR position, const XMVECTOR dire
 	if (dot > -0.99f && dot < 0.99f)
 	{
 		float scale = ARROW_SCALE * this->GetWidgetScale(position);
-		XMMATRIX rotation = XMVectorGetY(direction) > 0.999f ? XMMatrixRotationX(-3.14159265f / 2.0f) : XMMatrixLookToLH(XMVectorZero(), XMVectorMultiply(direction, XMVectorSet(-1.0f, 1.0f, 1.0f, 1.0f)), XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
+		XMVECTOR quaternion = XMVectorSetW(XMVector3Cross(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), direction), 1.0f + XMVectorGetX(XMVector3Dot(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), direction)));
+		XMMATRIX rotation = XMMatrixRotationQuaternion(XMQuaternionNormalize(quaternion));
 		XMMATRIX transform = XMMatrixMultiply(XMMatrixScaling(scale, scale, scale), XMMatrixMultiply(rotation, XMMatrixTranslationFromVector(position)));
 		this->GetShowcase()->DrawWidgetMesh(this->_ArrowLineMesh, transform, tint);
 		this->GetShowcase()->DrawWidgetMesh(this->_ArrowheadMesh, XMMatrixMultiply(XMMatrixMultiply(XMMatrixScaling(ARROWHEAD_SIZE, ARROWHEAD_SIZE, ARROWHEAD_SIZE), XMMatrixTranslation(0.0f, 0.0f, ARROW_STEM_LENGTH)), transform), tint);
@@ -94,7 +95,7 @@ MoveTool::MoveToolWidget MoveTool::HitTestWidgets(int x, int y, XMVECTOR& hitPoi
 	}
 }
 
-DirectX::XMVECTOR XM_CALLCONV MoveTool::SnapToWidget(int x, int y, MoveToolWidget widget) const
+XMVECTOR XM_CALLCONV MoveTool::SnapToWidget(int x, int y, MoveToolWidget widget) const
 {
 	SceneObject* selectedObject = this->GetShowcase()->GetSelectedObject();
 	if (selectedObject != nullptr)
@@ -205,10 +206,9 @@ void MoveTool::OnMouseUp(int button, int x, int y)
 
 void MoveTool::OnMouseMove(int x, int y)
 {
-	XMVECTOR hitPoint;
-
 	if (!this->_IsDraggingWidget)
 	{
+		XMVECTOR hitPoint;
 		this->_ActiveWidget = this->HitTestWidgets(x, y, hitPoint);
 	}
 	else
