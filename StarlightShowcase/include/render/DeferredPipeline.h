@@ -13,6 +13,9 @@ private:
 	ID3D11DeviceContext* _ImmediateContext;
 	ID3D11Texture2D* _OutputTexture;
 	ID3D11RenderTargetView* _OutputRTV = nullptr;
+	ID3D11Texture2D* _DepthStencilTexture = nullptr;
+	ID3D11DepthStencilView* _DepthStencilView = nullptr;
+	ID3D11DepthStencilState* _DepthStencilState = nullptr;
 	size_t _Width;
 	size_t _Height;
 
@@ -24,6 +27,7 @@ public:
 	~DeferredPipeline();
 
 	inline ID3D11RenderTargetView* GetOutputRTV() const { return this->_OutputRTV; }
+	inline ID3D11DepthStencilView* GetDepthStencilView() const { return this->_DepthStencilView; }
 	inline size_t GetWidth() const { return this->_Width; }
 	inline size_t GetHeight() const { return this->_Height; }
 

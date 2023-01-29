@@ -1,6 +1,7 @@
 #include "Showcase.h"
 
 #include "Widget.h"
+#include "render/DeferredPipeline.h"
 #include "scene/SceneObject.h"
 #include "scene/PointLight.h"
 #include "imgui/imgui.h"
@@ -67,6 +68,10 @@ void Showcase::SetActiveTool(Tool* tool)
 void Showcase::OnDrawWidgets()
 {
 	this->DrawWidgetMesh(this->_GridMesh, DirectX::XMMatrixIdentity(), DirectX::XMVectorSet(1.0f, 1.0f, 1.0f, 0.0f));
+
+	// Draw tool widgets through scene and grid
+
+	this->GetImmediateContext()->ClearDepthStencilView(this->GetPipeline()->GetDepthStencilView(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
 	if (this->_ActiveTool != nullptr)
 	{

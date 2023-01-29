@@ -129,8 +129,7 @@ void Window::Render()
 	// Draw scene
 	this->_Pipeline->Draw();
 
-	ID3D11RenderTargetView* rtv = this->_Pipeline->GetOutputRTV();
-	this->_ImmediateContext->OMSetRenderTargets(1, &rtv, nullptr);
+	// Draw widgets on top of scene
 	this->OnDrawWidgets();
 
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
