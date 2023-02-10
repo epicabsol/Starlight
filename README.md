@@ -11,7 +11,7 @@ Starlight is meant to be consumed from both C++ as a static library, and from ot
 
 `/StarlightDemo/` is a sample command-line application that aims to demonstrate how to bake light masks with Starlight, while being as simple and clean as possible.
 
-`/StarlightShowcase/` is a sample Windows application that lets the user arrange lights and models, bake the light masks with Starlight, and then view them in the 3D viewport.
+`/StarlightShowcase/` is a sample Windows application that lets the user interactively arrange lights around a model, bake the light masks with Starlight, and then view them, in real-time.
 
 Light Masks
 -----------

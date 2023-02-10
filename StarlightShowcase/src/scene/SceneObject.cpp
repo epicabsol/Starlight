@@ -15,5 +15,5 @@ void SceneObject::OnDeselected()
 void SceneObject::OnDrawProperties()
 {
 	ImGui::InputFloat3("Position", &this->_Position.x);
-	ImGui::LabelText("Rotation (Quat)", "<%.02f, %.02f, %.02f, %.02f>", this->_Rotation.x, this->_Rotation.y, this->_Rotation.z, this->_Rotation.w);
+	ImGui::LabelText("Rotation", "<%.02f, %.02f, %.02f, %.02f>", this->_Rotation.x, this->_Rotation.y, this->_Rotation.z, this->_Rotation.w);
 }

@@ -4,6 +4,7 @@
 #include "render/DeferredPipeline.h"
 #include "scene/SceneObject.h"
 #include "scene/PointLight.h"
+#include "scene/SceneModel.h"
 #include "imgui/imgui.h"
 #include "imgui/imgui_custom.h"
 
@@ -15,6 +16,25 @@
 
 using namespace DirectX;
 
+void Showcase::DrawSceneObjectTreeItem(SceneObject* sceneObject)
+{
+	ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_FramePadding | ImGuiTreeNodeFlags_Leaf;
+	if (sceneObject->IsSelected())
+	{
+		nodeFlags |= ImGuiTreeNodeFlags_Selected;
+	}
+	bool clicked = ImGui::TreeNodeEx(sceneObject, nodeFlags, "%s", sceneObject->GetDisplayName().GetData());
+	if (ImGui::IsItemClicked())
+	{
+		this->SetSelectedObject(sceneObject);
+	}
+	if (clicked)
+	{
+		ImGui::TreePop();
+	}
+
+}
+
 Showcase::Showcase(HINSTANCE hInstance) : Window(&Window::HandleCreation<Showcase>, hInstance, L"Starlight Showcase"), _PointLights(), _ActiveTool(nullptr)
 {
 	this->_SelectTool = new SelectTool(this);
@@ -25,7 +45,8 @@ Showcase::Showcase(HINSTANCE hInstance) : Window(&Window::HandleCreation<Showcas
 	this->_RotateTool = new RotateTool(this);
 	this->_Tools.push_back(this->_RotateTool);
 	
-	this->_PointLights.push_back(new PointLight());
+	this->_PointLights.push_back(new PointLight("Point Light 0"));
+	this->_SceneModel = new SceneModel();
 	this->SetSelectedObject(this->_PointLights[0]);
 }
 
@@ -65,6 +86,20 @@ void Showcase::SetActiveTool(Tool* tool)
 	}
 }
 
+void Showcase::LoadCornellBoxModel()
+{
+
+	this->_SceneModel->SetModel(nullptr, "Cornell Box");
+	this->SetSelectedObject(this->_SceneModel);
+}
+
+void Showcase::LoadCustomModel()
+{
+	// TODO: Implement!
+	MessageBoxA(0, "Not yet implemented.", "Starlight Showcase", MB_OK);
+	//this->SetSelectedObject(this->_SceneModel);
+}
+
 void Showcase::OnDrawWidgets()
 {
 	this->DrawWidgetMesh(this->_GridMesh, DirectX::XMMatrixIdentity(), DirectX::XMVectorSet(1.0f, 1.0f, 1.0f, 0.0f));
@@ -96,7 +131,7 @@ void Showcase::OnUpdate(float timeStep)
 			{
 				if (ImGuiCustom::MenuItem("Use Cornell Box"))
 				{
-					// TODO: Implement!
+					this->LoadCornellBoxModel();
 				}
 
 				ImGuiCustom::EndSubmenu();
@@ -104,7 +139,7 @@ void Showcase::OnUpdate(float timeStep)
 
 			if (ImGuiCustom::MenuItem("Use Custom Model..."))
 			{
-				// TODO: Implement!
+				this->LoadCustomModel();
 			}
 
 			ImGuiCustom::EndMenu();
@@ -178,11 +213,7 @@ void Showcase::OnUpdate(float timeStep)
 		if (ImGui::Begin("Objects", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse))
 		{
 			const ImGuiTreeNodeFlags defaultNodeFlags = ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_FramePadding;
-			ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_Leaf;
-			if (ImGui::TreeNodeEx("Model", defaultNodeFlags | ImGuiTreeNodeFlags_Leaf))
-			{
-				ImGui::TreePop();
-			}
+			this->DrawSceneObjectTreeItem(this->_SceneModel);
 
 			if (ImGui::TreeNodeEx("Sky Light", defaultNodeFlags | ImGuiTreeNodeFlags_Leaf))
 			{
@@ -193,20 +224,7 @@ void Showcase::OnUpdate(float timeStep)
 			{
 				for (size_t i = 0; i < this->_PointLights.size(); i++)
 				{
-					nodeFlags = defaultNodeFlags | ImGuiTreeNodeFlags_Leaf;
-					if (this->_PointLights[i]->IsSelected())
-					{
-						nodeFlags |= ImGuiTreeNodeFlags_Selected;
-					}
-					bool clicked = ImGui::TreeNodeEx(this->_PointLights[i], nodeFlags, "Point Light %d", (int)i);
-					if (ImGui::IsItemClicked())
-					{
-						this->SetSelectedObject(this->_PointLights[i]);
-					}
-					if (clicked)
-					{
-						ImGui::TreePop();
-					}
+					this->DrawSceneObjectTreeItem(this->_PointLights[i]);
 				}
 
 				ImGui::TreePop();

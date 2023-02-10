@@ -100,7 +100,9 @@ XMVECTOR XM_CALLCONV RotateTool::SnapToWidget(int x, int y, RotateToolWidget wid
 		this->GetScreenRay(x, y, rayOrigin, rayDirection);
 		if (widget >= RotateToolWidget::DiscX && widget <= RotateToolWidget::DiscZ)
 		{
-			return XMPlaneIntersectLine(XMPlaneFromPointNormal(selectedObject->GetPosition(), XMVector3Rotate(XMLoadFloat3(&RotateDiscs[(int)widget - (int)RotateToolWidget::DiscX].Direction), selectedObject->GetRotation())), rayOrigin, rayDirection);
+			XMVECTOR point = selectedObject->GetPosition();
+			XMVECTOR normal = XMVector3Rotate(XMLoadFloat3(&RotateDiscs[(int)widget - (int)RotateToolWidget::DiscX].Direction), selectedObject->GetRotation());
+			return XMPlaneIntersectLine(XMPlaneFromPointNormal(point, normal), rayOrigin, XMVectorAdd(rayOrigin, rayDirection));
 		}
 		else
 		{
@@ -153,6 +155,8 @@ void RotateTool::DrawWidgets()
 		}
 		this->DrawDisc(selectedObject->GetPosition(), XMVector3Normalize(XMVectorSubtract(this->GetShowcase()->GetCamera()->GetPosition(), selectedObject->GetPosition())), XMVectorSet(0.5f, 0.5f, 0.5f, 1.0f), 1.25f);
 	}
+
+	this->DrawDisc(XMLoadFloat3(&this->_DragInitialCursor), XMVector3Normalize(XMVectorSubtract(this->GetShowcase()->GetCamera()->GetPosition(), selectedObject->GetPosition())), XMVectorSet(1.0f, 1.0f, 1.0f, 1.0f), 0.1f);
 }
 
 void RotateTool::OnMouseDown(int button, int x, int y)

@@ -7,7 +7,9 @@ void PointLight::OnDrawProperties()
 	Light::OnDrawProperties();
 
 	this->DrawInvalidatingFloatProperty("Radius", &this->_Radius);
-	this->DrawInvalidatingFloatProperty("Attenuation: Constant", &this->_AttenuationConstant);
-	this->DrawInvalidatingFloatProperty("Attenuation: Linear", &this->_AttenuationLinear);
-	this->DrawInvalidatingFloatProperty("Attenuation: Quadratic", &this->_AttenuationQuadratic);
+
+	ImGui::Text("Attenuation:");
+	this->DrawInvalidatingFloatProperty("Constant", &this->_AttenuationConstant);
+	this->DrawInvalidatingFloatProperty("Linear", &this->_AttenuationLinear);
+	this->DrawInvalidatingFloatProperty("Quadratic", &this->_AttenuationQuadratic);
 }

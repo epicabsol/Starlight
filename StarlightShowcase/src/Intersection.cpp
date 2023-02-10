@@ -69,10 +69,3 @@ bool XM_CALLCONV IntersectRayDisc(const XMVECTOR rayOrigin, const XMVECTOR rayDi
 		return false;
 	}
 }
-
-XMVECTOR XM_CALLCONV ProjectPointOntoAxis(const XMVECTOR point, const XMVECTOR axisOrigin, const XMVECTOR axisDirection)
-{
-	XMVECTOR toPoint = XMVectorSubtract(point, axisOrigin);
-	
-	return XMVectorAdd(axisOrigin, XMVectorScale(axisDirection, XMVectorGetX(XMVectorDivide(XMVector3Dot(toPoint, axisDirection), XMVector3Dot(axisDirection, axisDirection)))));
-}

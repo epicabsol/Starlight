@@ -5,8 +5,8 @@
 class Light : public SceneObject
 {
 private:
-	DirectX::XMFLOAT3 _Color;
-	bool _NeedsMaskUpdate;
+	DirectX::XMFLOAT3 _Color = DirectX::XMFLOAT3(1.0f, 1.0f, 1.0f);
+	bool _NeedsMaskUpdate = true;
 
 	// TODO: Store light masks
 
@@ -18,6 +18,8 @@ public:
 	virtual void OnDrawProperties() override;
 
 protected:
+	inline Light(const StringView& displayName) : SceneObject(displayName) { }
+
 	void DrawInvalidatingFloatProperty(const char* label, float* value);
 	void DrawInvalidatingColor3Property(const char* label, float* value);
 };

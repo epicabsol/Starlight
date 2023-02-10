@@ -106,10 +106,10 @@ XMVECTOR XM_CALLCONV MoveTool::SnapToWidget(int x, int y, MoveToolWidget widget)
 		if (widget >= MoveToolWidget::AxisX && widget <= MoveToolWidget::AxisZ)
 		{
 			// Axis widget
-			// Project cursor position onto camera-facing plane and then onto axis
-		
-			XMVECTOR pointOnPlane = XMPlaneIntersectLine(XMPlaneFromPointNormal(selectedObject->GetPosition(), this->GetShowcase()->GetCameraController()->GetForwardVector()), rayOrigin, XMVectorAdd(rayOrigin, rayDirection));
+			// Project cursor position onto camera-facing plane along the axis and then onto axis
 			MoveAxisInfo* axisInfo = &MoveAxes[(int)widget - (int)MoveToolWidget::AxisX];
+			XMVECTOR planeNormal = RemoveVectorAxis(this->GetShowcase()->GetCameraController()->GetForwardVector(), XMLoadFloat3(&axisInfo->Direction));
+			XMVECTOR pointOnPlane = XMPlaneIntersectLine(XMPlaneFromPointNormal(selectedObject->GetPosition(), planeNormal), rayOrigin, XMVectorAdd(rayOrigin, rayDirection));
 			return ProjectPointOntoAxis(pointOnPlane, selectedObject->GetPosition(), XMVector3Rotate(XMLoadFloat3(&axisInfo->Direction), selectedObject->GetRotation()));
 		}
 		else if (widget >= MoveToolWidget::PlaneXY && widget <= MoveToolWidget::PlaneXZ)

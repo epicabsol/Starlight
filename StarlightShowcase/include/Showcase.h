@@ -7,6 +7,7 @@
 class Mesh;
 class SceneObject;
 class PointLight;
+class SceneModel;
 class Tool;
 class SelectTool;
 class MoveTool;
@@ -19,6 +20,7 @@ private:
 	Mesh* _GridMesh;
 
 	std::vector<PointLight*> _PointLights;
+	SceneModel* _SceneModel;
 	SceneObject* _SelectedObject = nullptr;
 
 	std::vector<Tool*> _Tools;
@@ -30,12 +32,17 @@ private:
 	bool _ObjectsPaneVisible = true;
 	bool _PropertiesPaneVisible = true;
 
+	void DrawSceneObjectTreeItem(SceneObject* sceneObject);
+
 public:
 	Showcase(HINSTANCE hInstance);
 
 	inline SceneObject* GetSelectedObject() const { return this->_SelectedObject; }
 	void SetSelectedObject(SceneObject* selectedObject);
 	void SetActiveTool(Tool* tool);
+
+	void LoadCornellBoxModel();
+	void LoadCustomModel();
 
 protected:
 	virtual void OnDrawWidgets() override;
