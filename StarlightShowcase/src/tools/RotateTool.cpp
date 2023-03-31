@@ -155,8 +155,6 @@ void RotateTool::DrawWidgets()
 		}
 		this->DrawDisc(selectedObject->GetPosition(), XMVector3Normalize(XMVectorSubtract(this->GetShowcase()->GetCamera()->GetPosition(), selectedObject->GetPosition())), XMVectorSet(0.5f, 0.5f, 0.5f, 1.0f), 1.25f);
 	}
-
-	this->DrawDisc(XMLoadFloat3(&this->_DragInitialCursor), XMVector3Normalize(XMVectorSubtract(this->GetShowcase()->GetCamera()->GetPosition(), selectedObject->GetPosition())), XMVectorSet(1.0f, 1.0f, 1.0f, 1.0f), 0.1f);
 }
 
 void RotateTool::OnMouseDown(int button, int x, int y)
@@ -201,13 +199,17 @@ void RotateTool::OnMouseMove(int x, int y)
 		if (selectedObject != nullptr)
 		{
 			// Update object rotation
-			// TODO: Make this work & feel better
 			XMVECTOR originalDirection = XMVector3Normalize(XMVectorSubtract(XMLoadFloat3(&this->_DragInitialCursor), selectedObject->GetPosition()));
 			XMVECTOR newDirection = XMVector3Normalize(XMVectorSubtract(this->SnapToWidget(x, y, this->_ActiveWidget), selectedObject->GetPosition()));
-			XMVECTOR discNormal = XMLoadFloat3(&RotateDiscs[(int)this->_ActiveWidget - (int)RotateToolWidget::DiscX].Direction);
-			XMVECTOR cross = XMVector3Cross(originalDirection, newDirection);
-			float dot = XMVectorGetX(XMVector3Dot(cross, discNormal)); // Apply the sign (positive or negative) to the cross product
-			selectedObject->SetRotation(XMQuaternionNormalize(XMQuaternionMultiply(XMQuaternionRotationAxis(discNormal, asinf(dot)), XMLoadFloat4(&this->_DragInitialRotation))));
+			XMVECTOR discNormal = XMVector3Rotate(XMLoadFloat3(&RotateDiscs[(int)this->_ActiveWidget - (int)RotateToolWidget::DiscX].Direction), XMLoadFloat4(&this->_DragInitialRotation));
+
+			float dot = XMVectorGetX(XMVector3Dot(originalDirection, newDirection));
+			float angle = acosf(dot);
+
+			XMVECTOR orthogonal = XMVector3Normalize(XMVector3Cross(discNormal, originalDirection));
+			angle = copysignf(angle, XMVectorGetX(XMVector3Dot(orthogonal, newDirection)));
+
+			selectedObject->SetRotation(XMQuaternionNormalize(XMQuaternionMultiply(XMLoadFloat4(&this->_DragInitialRotation), XMQuaternionRotationAxis(discNormal, angle))));
 		}
 	}
 }
